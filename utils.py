@@ -1,4 +1,5 @@
 # utils.py
+
 import sqlite3
 
 def load_signals():
