@@ -1,170 +1,130 @@
 import pandas as pd
 import numpy as np
 
-# ADX (Average Directional Index) for trend
-def get_adx_signal(df, period=15):
+def compute_adx(df, period=15):
     df['TR'] = np.maximum(df['High'] - df['Low'],
-                 np.maximum(abs(df['High'] - df['Close'].shift()), abs(df['Low'] - df['Close'].shift())))
-    df['+DM'] = np.where((df['High'] - df['High'].shift()) > (df['Low'].shift() - df['Low']), 
-                         np.maximum(df['High'] - df['High'].shift(), 0), 0)
-    df['-DM'] = np.where((df['Low'].shift() - df['Low']) > (df['High'] - df['High'].shift()), 
-                         np.maximum(df['Low'].shift() - df['Low'], 0), 0)
-    
-    tr_smooth = df['TR'].rolling(window=period).sum()
-    plus_di = 100 * (df['+DM'].rolling(window=period).sum() / tr_smooth)
-    minus_di = 100 * (df['-DM'].rolling(window=period).sum() / tr_smooth)
-    dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+                  np.maximum(abs(df['High'] - df['Close'].shift(1)), abs(df['Low'] - df['Close'].shift(1))))
+    df['+DM'] = np.where((df['High'] - df['High'].shift(1)) > (df['Low'].shift(1) - df['Low']),
+                         np.maximum((df['High'] - df['High'].shift(1)), 0), 0)
+    df['-DM'] = np.where((df['Low'].shift(1) - df['Low']) > (df['High'] - df['High'].shift(1)),
+                         np.maximum((df['Low'].shift(1) - df['Low']), 0), 0)
+    TR14 = df['TR'].rolling(window=period).sum()
+    plus_DM14 = df['+DM'].rolling(window=period).sum()
+    minus_DM14 = df['-DM'].rolling(window=period).sum()
+    plus_DI14 = 100 * (plus_DM14 / TR14)
+    minus_DI14 = 100 * (minus_DM14 / TR14)
+    dx = 100 * (abs(plus_DI14 - minus_DI14) / (plus_DI14 + minus_DI14))
     adx = dx.rolling(window=period).mean()
+    return adx
 
-    if adx.iloc[-1] > 25:
-        return "Buy"
-    elif adx.iloc[-1] < 20:
-        return "Sell"
-    else:
-        return "Hold"
+def compute_rsi(df, period=15):
+    delta = df['Close'].diff()
+    gain = delta.where(delta > 0, 0).rolling(window=period).mean()
+    loss = -delta.where(delta < 0, 0).rolling(window=period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
 
-# Stochastic Oscillator for momentum
-def get_stochastic_signal(df, period=15):
-    low_min = df['Low'].rolling(window=period).min()
-    high_max = df['High'].rolling(window=period).max()
-    k = 100 * (df['Close'] - low_min) / (high_max - low_min)
-    d = k.rolling(3).mean()
+def compute_macd(df, fast=5, slow=20, signal=60):
+    ema_fast = df['Close'].ewm(span=fast, adjust=False).mean()
+    ema_slow = df['Close'].ewm(span=slow, adjust=False).mean()
+    macd = ema_fast - ema_slow
+    signal_line = macd.ewm(span=signal, adjust=False).mean()
+    return macd - signal_line
 
-    if k.iloc[-1] > 80 and d.iloc[-1] > 80:
-        return "Sell"
-    elif k.iloc[-1] < 20 and d.iloc[-1] < 20:
-        return "Buy"
-    else:
-        return "Hold"
+def compute_obv(df):
+    obv = [0]
+    for i in range(1, len(df)):
+        if df['Close'][i] > df['Close'][i-1]:
+            obv.append(obv[-1] + df['Volume'][i])
+        elif df['Close'][i] < df['Close'][i-1]:
+            obv.append(obv[-1] - df['Volume'][i])
+        else:
+            obv.append(obv[-1])
+    return pd.Series(obv, index=df.index)
 
-# Chaikin Oscillator for volume
-def get_chaikin_signal(df, period=15):
-    mfv = ((df['Close'] - df['Low']) - (df['High'] - df['Close'])) / (df['High'] - df['Low']) * df['Volume']
+def compute_chaikin(df, period=15):
+    mfm = ((df['Close'] - df['Low']) - (df['High'] - df['Close'])) / (df['High'] - df['Low']).replace(0, np.nan)
+    mfv = mfm * df['Volume']
     adl = mfv.cumsum()
     ema3 = adl.ewm(span=3, adjust=False).mean()
     ema10 = adl.ewm(span=10, adjust=False).mean()
-    chaikin = ema3 - ema10
+    return ema3 - ema10
 
-    if chaikin.iloc[-1] > 0:
-        return "Buy"
-    elif chaikin.iloc[-1] < 0:
-        return "Sell"
-    else:
-        return "Hold"
+def compute_atr(df, period=15):
+    high_low = df['High'] - df['Low']
+    high_close = abs(df['High'] - df['Close'].shift(1))
+    low_close = abs(df['Low'] - df['Close'].shift(1))
+    tr = high_low.combine(high_close, max).combine(low_close, max)
+    return tr.rolling(window=period).mean()
 
-# ATR (Average True Range) for volatility
-def get_atr_signal(df, period=15):
-    tr = df[['High', 'Low', 'Close']].copy()
-    tr['h-l'] = df['High'] - df['Low']
-    tr['h-c'] = abs(df['High'] - df['Close'].shift())
-    tr['l-c'] = abs(df['Low'] - df['Close'].shift())
-    tr['TR'] = tr[['h-l', 'h-c', 'l-c']].max(axis=1)
-    atr = tr['TR'].rolling(window=period).mean()
-
-    change = df['Close'].pct_change()
-    if change.iloc[-1] > (atr.iloc[-1] / df['Close'].iloc[-1]):
-        return "Buy"
-    elif change.iloc[-1] < -(atr.iloc[-1] / df['Close'].iloc[-1]):
-        return "Sell"
-    else:
-        return "Hold"
-
-# Gann Fan (1:1 line logic) for support/resistance
-def get_gann_fan_signal(df):
-    recent_high = df['High'].rolling(window=15).max()
-    recent_low = df['Low'].rolling(window=15).min()
-    last_close = df['Close'].iloc[-1]
-    support = recent_low.iloc[-1] + ((recent_high.iloc[-1] - recent_low.iloc[-1]) / 2)
-
-    if last_close < support:
-        return "Support"
-    elif last_close > support:
-        return "Resistance"
-    else:
-        return "Neutral"
-
-# MACD (Momentum)
-def get_macd_signal(df):
-    ema12 = df['Close'].ewm(span=12, adjust=False).mean()
-    ema26 = df['Close'].ewm(span=26, adjust=False).mean()
-    macd = ema12 - ema26
-    signal = macd.ewm(span=9, adjust=False).mean()
-
-    if macd.iloc[-1] > signal.iloc[-1]:
-        return "Buy"
-    elif macd.iloc[-1] < signal.iloc[-1]:
-        return "Sell"
-    else:
-        return "Hold"
-
-# RSI (Momentum)
-def get_rsi_signal(df, period=15):
-    delta = df['Close'].diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    avg_gain = gain.rolling(window=period).mean()
-    avg_loss = loss.rolling(window=period).mean()
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-
-    if rsi.iloc[-1] > 70:
-        return "Sell"
-    elif rsi.iloc[-1] < 30:
-        return "Buy"
-    else:
-        return "Hold"
-
-# OBV (On-Balance Volume) (Volume)
-def get_obv_signal(df):
-    obv = [0]
-    for i in range(1, len(df)):
-        if df['Close'].iloc[i] > df['Close'].iloc[i-1]:
-            obv.append(obv[-1] + df['Volume'].iloc[i])
-        elif df['Close'].iloc[i] < df['Close'].iloc[i-1]:
-            obv.append(obv[-1] - df['Volume'].iloc[i])
-        else:
-            obv.append(obv[-1])
-    if obv[-1] > obv[-2]:
-        return "Buy"
-    elif obv[-1] < obv[-2]:
-        return "Sell"
-    else:
-        return "Hold"
-
-# Bollinger Bands (Volatility)
-def get_bollinger_signal(df, period=30):
+def compute_bollinger(df, period=30):
     sma = df['Close'].rolling(window=period).mean()
     std = df['Close'].rolling(window=period).std()
-    upper = sma + (2 * std)
-    lower = sma - (2 * std)
+    upper_band = sma + (2 * std)
+    lower_band = sma - (2 * std)
+    return upper_band, lower_band
 
-    if df['Close'].iloc[-1] > upper.iloc[-1]:
-        return "Sell"
-    elif df['Close'].iloc[-1] < lower.iloc[-1]:
-        return "Buy"
-    else:
-        return "Hold"
-
-# Fibonacci Retracement (Support/Resistance)
-def get_fibonacci_signal(df):
-    max_price = df['High'].rolling(window=30).max().iloc[-1]
-    min_price = df['Low'].rolling(window=30).min().iloc[-1]
+def compute_fibonacci_support_resistance(df):
+    max_price = df['High'].max()
+    min_price = df['Low'].min()
     diff = max_price - min_price
-    levels = [0.236, 0.382, 0.5, 0.618, 0.786]
-    close = df['Close'].iloc[-1]
+    levels = {
+        '0.0%': max_price,
+        '23.6%': max_price - 0.236 * diff,
+        '38.2%': max_price - 0.382 * diff,
+        '50.0%': max_price - 0.5 * diff,
+        '61.8%': max_price - 0.618 * diff,
+        '100.0%': min_price
+    }
+    return levels
 
-    for level in levels:
-        retracement = max_price - (diff * level)
-        if abs(close - retracement) / close < 0.005:
-            return "Resistance" if close > retracement else "Support"
-    return "Neutral"
+def compute_gann_fan(df):
+    df['gann'] = df['Close'].shift(1) + (df['Close'].shift(1) * 0.125)
+    return df['gann']
 
-# Aggregated logic (Final output)
+def compute_vwap(df, period=10):
+    pv = df['Close'] * df['Volume']
+    rolling_pv = pv.rolling(window=period).sum()
+    rolling_vol = df['Volume'].rolling(window=period).sum()
+    return rolling_pv / rolling_vol
+
 def compute_all_indicators(df):
-    return {
-        "trend": get_adx_signal(df),
-        "momentum": get_stochastic_signal(df),
-        "volume": get_chaikin_signal(df),
-        "volatility": get_atr_signal(df),
-        "support_resistance": get_gann_fan_signal(df)
-  }
+    results = {}
+
+    adx = compute_adx(df)
+    rsi = compute_rsi(df)
+    macd = compute_macd(df)
+    obv = compute_obv(df)
+    chaikin = compute_chaikin(df)
+    atr = compute_atr(df)
+    upper, lower = compute_bollinger(df)
+    fib = compute_fibonacci_support_resistance(df)
+    gann = compute_gann_fan(df)
+    vwap = compute_vwap(df)
+
+    results['trend'] = sum([
+        adx.iloc[-1] > 25,
+        vwap.iloc[-1] < df['Close'].iloc[-1]
+    ])
+
+    results['momentum'] = sum([
+        rsi.iloc[-1] > 50,
+        macd.iloc[-1] > 0
+    ])
+
+    results['volume'] = sum([
+        obv.iloc[-1] > obv.mean(),
+        chaikin.iloc[-1] > 0
+    ])
+
+    results['volatility'] = sum([
+        atr.iloc[-1] > atr.mean(),
+        df['Close'].iloc[-1] > upper.iloc[-1] or df['Close'].iloc[-1] < lower.iloc[-1]
+    ])
+
+    results['support_resistance'] = sum([
+        df['Close'].iloc[-1] > fib['61.8%'],
+        df['Close'].iloc[-1] > gann.iloc[-1]
+    ])
+
+    return results
