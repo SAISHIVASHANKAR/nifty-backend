@@ -3,7 +3,7 @@
 from stocks import STOCKS
 from fetch_from_yf import fetch_from_yf
 
-print("Fetching EOD data and caching to nifty_stocks.db and /mnt/yf_cache")
+print("📥 Fetching EOD data and caching to nifty_stocks.db and /mnt/yf_cache")
 
 for symbol in STOCKS:
     try:
