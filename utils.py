@@ -42,3 +42,17 @@ def insert_indicator_signal(conn, symbol, trend, momentum, volume, volatility, s
         conn.commit()
     except Exception as e:
         print(f"❌ Failed to insert signal for {symbol}: {e}")
+
+import pandas as pd
+
+def get_cached_df(symbol):
+    """
+    Load EOD price data from CSV in /mnt/yf_cache for the given symbol.
+    Returns a pandas DataFrame.
+    """
+    path = f"/mnt/yf_cache/{symbol}.csv"
+    df = pd.read_csv(path, skiprows=1)  # Assuming row 0 is header
+    df.columns = ["Date", "Close", "High", "Low", "Open", "Volume"]
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.sort_values("Date").reset_index(drop=True)
+    return df
