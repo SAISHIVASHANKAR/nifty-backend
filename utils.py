@@ -1,30 +1,30 @@
-# utils.py
-
-import pandas as pd
 import sqlite3
+import pandas as pd
+import os
 
+DB_PATH = os.path.join(os.path.dirname(__file__), "nifty_stocks.db")
+
+# Load price data from SQLite
 def get_cached_df(symbol):
-    try:
-        conn = sqlite3.connect("nifty_stocks.db")
-        query = f"SELECT * FROM price_data WHERE symbol = ? ORDER BY date ASC"
-        df = pd.read_sql_query(query, conn, params=(symbol,))
-        conn.close()
-
-        # Ensure expected columns exist
-        expected = {'date', 'open', 'high', 'low', 'close', 'volume'}
-        if not expected.issubset(df.columns):
-            print(f"⚠️ Missing columns in {symbol}")
-            return None
-
-        # Convert columns to proper types
-        df['open'] = pd.to_numeric(df['open'], errors='coerce')
-        df['high'] = pd.to_numeric(df['high'], errors='coerce')
-        df['low'] = pd.to_numeric(df['low'], errors='coerce')
-        df['close'] = pd.to_numeric(df['close'], errors='coerce')
-        df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
-        df.dropna(inplace=True)
-
-        return df
-    except Exception as e:
-        print(f"❌ Failed to load {symbol} from DB: {e}")
+    conn = sqlite3.connect(DB_PATH)
+    query = f"SELECT Date, Close, High, Low, Open, Volume FROM prices WHERE Symbol = '{symbol}'"
+    df = pd.read_sql(query, conn, parse_dates=["Date"])
+    conn.close()
+    if df.empty or df.isnull().any().any():
         return None
+    df.sort_values("Date", inplace=True)
+    df.reset_index(drop=True, inplace=True)
+    return df
+
+# Save indicator signal to SQLite
+def insert_indicator_signal(symbol, indicator, signal_type, signal_value, strength, category, count):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        INSERT INTO signals (symbol, indicator, signal_type, signal_value, strength, category, count)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (symbol, indicator, signal_type, signal_value, strength, category, count))
+
+    conn.commit()
+    conn.close()
