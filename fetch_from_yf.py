@@ -1,40 +1,36 @@
-# fetch_from_yf.py (updated to dynamically load all stock symbols)
+# fetch_from_yf.py
+
 import yfinance as yf
-import sqlite3
-from datetime import datetime
 from utils import insert_into_prices_table
-from stocks import STOCKS  # Use this if pulling from dict, or fetch from DB for full automation
+from stocks import STOCKS
+from datetime import datetime, timedelta
 
-def fetch_yf(symbol: str, years: int = 8):
+def fetch_yf(symbol, years=8):
+    end = datetime.now()
+    start = end - timedelta(days=years * 365)
     try:
-        period = f"{years}y"
-        print(f"📦Fetching {symbol} for {period}")
-        ticker = yf.Ticker(symbol + ".NS")
-        df = ticker.history(period=period)
-        if df.empty:
-            print(f"⚠️ No data returned for {symbol} ({period})")
-            return False
-
-        df.reset_index(inplace=True)
-        df = df[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
-        df['Symbol'] = symbol
-        insert_into_prices_table(df)
-        print(f"✅{symbol} inserted into DB")
-        return True
-
+        df = yf.download(f"{symbol}.NS", start=start.strftime('%Y-%m-%d'), end=end.strftime('%Y-%m-%d'), progress=False)
+        if not df.empty:
+            df.reset_index(inplace=True)
+            df['Symbol'] = symbol
+            insert_into_prices_table(df, symbol)  # ✅ fixed: added symbol argument
+            print(f"✅ {symbol} fetched from Yahoo ({years}y)")
+            return df
+        else:
+            print(f"⚠️ No data for {symbol} ({years}y)")
     except Exception as e:
-        print(f"❌Error fetching {symbol} for {period}: {e}")
-        return False
+        print(f"❌ Error fetching {symbol} for {years}y:", e)
+    return None
 
 def fetch_all_symbols():
-    for idx, symbol in enumerate(STOCKS):
-        success = False
+    for i, symbol in enumerate(STOCKS.keys(), 1):
+        print(f"[{i}/{len(STOCKS)}] Processing: {symbol}")
         for y in range(8, 0, -1):
-            if fetch_yf(symbol, years=y):
-                success = True
+            df = fetch_yf(symbol, years=y)
+            if df is not None:
                 break
-        if not success:
-            print(f"❌Skipped {symbol}: No usable data")
+        else:
+            print(f"❌ Skipped {symbol}: No usable data")
 
 if __name__ == "__main__":
     fetch_all_symbols()
