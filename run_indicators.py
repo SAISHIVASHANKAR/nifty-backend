@@ -1,50 +1,47 @@
-# run_indicators.py
-
+import os
 import sqlite3
-from indicators import compute_all_indicators
 from utils import get_cached_df
+from indicators import compute_all_indicators
 from stocks import STOCKS
 
-print("Running indicators and saving signals to indicator_signals.db")
-
-# Connect to the output database
+# Connect to or create the SQLite database
 conn = sqlite3.connect("indicator_signals.db")
 cursor = conn.cursor()
 
-# Create table if not exists
+# Create table if it doesn't exist
 cursor.execute("""
-    CREATE TABLE IF NOT EXISTS signals (
-        symbol TEXT PRIMARY KEY,
-        trend INTEGER,
-        momentum INTEGER,
-        volume INTEGER,
-        volatility INTEGER,
-        support_resistance INTEGER
-    )
+CREATE TABLE IF NOT EXISTS signals (
+    symbol TEXT PRIMARY KEY,
+    trend INTEGER,
+    momentum INTEGER,
+    volume INTEGER,
+    volatility INTEGER,
+    support_resistance INTEGER
+)
 """)
+conn.commit()
 
-symbols = list(STOCKS.keys())  # ✅ Dynamically load all stocks
+print("\U0001F4DD Running indicators and saving signals to indicator_signals.db")
 
-for symbol in symbols:
-    print(f"🗂️ Processing: {symbol}")
+for symbol in STOCKS:
+    print(f"\U0001F4C4 Processing: {symbol}")
     try:
         df = get_cached_df(symbol)
-        signal_data = compute_all_indicators(df)
-        cursor.execute("""
-            INSERT OR REPLACE INTO signals (symbol, trend, momentum, volume, volatility, support_resistance)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            symbol,
-            signal_data.get("trend", 0),
-            signal_data.get("momentum", 0),
-            signal_data.get("volume", 0),
-            signal_data.get("volatility", 0),
-            signal_data.get("support_resistance", 0)
-        ))
-        conn.commit()
-        print(f"✅ Saved indicators for {symbol}")
+        if df is None:
+            print(f"⚠️ Skipped {symbol}: No data available.")
+            continue
+        signal_counts = compute_all_indicators(df)
+        cursor.execute("REPLACE INTO signals VALUES (?, ?, ?, ?, ?, ?)",
+                       (symbol,
+                        signal_counts['trend'],
+                        signal_counts['momentum'],
+                        signal_counts['volume'],
+                        signal_counts['volatility'],
+                        signal_counts['support_resistance']))
+        print(f"✅ Saved signals for {symbol}")
     except Exception as e:
         print(f"❌ Failed computing indicators for {symbol}: {e}")
         print(f"⚠️ Skipped {symbol}: No data or failed indicator computation.")
 
+conn.commit()
 conn.close()
