@@ -2,35 +2,37 @@
 
 import requests
 import pandas as pd
-from utils import insert_into_prices_table
 from datetime import datetime
-
-EOD_API_TOKEN = "683461c4e4da71.25040803"
+from utils import insert_into_prices_table, symbol_has_data
 
 def fetch_eodhistorical(symbol):
-    print(f"📦 Trying EODHistorical for {symbol}")
+    if symbol_has_data(symbol):
+        print(f"⏭️ Skipping {symbol}: already exists in DB.")
+        return True
+
     try:
-        url = f"https://eodhistoricaldata.com/api/eod/{symbol}.NSE?api_token={EOD_API_TOKEN}&fmt=json&period=d"
+        url = f"https://eodhistoricaldata.com/api/eod/{symbol}.NSE?api_token=683461c4e4da71.25040803&fmt=json"
         response = requests.get(url)
-
-        if response.status_code != 200:
-            print(f"❌ HTTP error {response.status_code} for {symbol} from EOD")
-            return False
-
         data = response.json()
-        if not data:
-            print(f"❌ Empty data received from EOD for {symbol}")
+
+        if not data or 'error' in data:
+            print(f"No data returned from EOD for {symbol}")
             return False
 
         df = pd.DataFrame(data)
         df["Date"] = pd.to_datetime(df["date"])
-        df.rename(columns={"open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"}, inplace=True)
-        df = df[["Date", "Open", "High", "Low", "Close", "Volume"]]
-        df.dropna(inplace=True)
+        df.rename(columns={
+            "open": "Open",
+            "high": "High",
+            "low": "Low",
+            "close": "Close",
+            "volume": "Volume"
+        }, inplace=True)
 
-        insert_into_prices_table(df, symbol)
-        return True
+        df = df[["Date", "Open", "High", "Low", "Close", "Volume"]]
+        success = insert_into_prices_table(df, symbol)
+        return success
 
     except Exception as e:
-        print(f"❌ EODHistorical error for {symbol}: {e}")
+        print(f"EOD fetch failed for {symbol}: {e}")
         return False
