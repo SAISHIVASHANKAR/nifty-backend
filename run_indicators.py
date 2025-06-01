@@ -20,7 +20,7 @@ for symbol in STOCKS:
 
     df = get_cached_df(symbol)
     if df is None or df.empty:
-        print(f"⚠️ Skipping {symbol}: No usable data")
+        print(f"⚠️ Skipping {symbol}: No usable DB data")
         continue
 
     try:
@@ -28,6 +28,6 @@ for symbol in STOCKS:
         conn.commit()
         print(f"✅ {symbol} inserted.")
     except Exception as e:
-        print(f"❌ Failed to insert signal for {symbol}: {e}")
+        print(f"❌ Failed for {symbol}: {e}")
 
 conn.close()
