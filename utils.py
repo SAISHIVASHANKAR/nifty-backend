@@ -37,6 +37,7 @@ def insert_into_prices_table(df, symbol):
         df["Symbol"] = symbol
 
         required_cols = ["Symbol", "Date", "Open", "High", "Low", "Close", "Volume"]
+        df = df[required_cols]
         for col in required_cols:
             if col not in df.columns:
                 raise ValueError(f"Missing required column: {col}")
