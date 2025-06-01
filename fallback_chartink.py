@@ -1,53 +1,48 @@
+# fallback_chartink.py (SQLite-safe version)
 import requests
 import pandas as pd
-import sqlite3
-from datetime import datetime
+from utils import insert_into_prices_table
 from stocks import STOCKS
+import time
+from datetime import datetime
 
-DB_PATH = "nifty_stocks.db"
-
-def fetch_chartink(symbol):
-    print(f"📦Fetching {symbol} from Chartink (mock)")
-
+def fetch_fallback_chartink(symbol):
     try:
-        # Simulated Chartink fallback logic (replace this with real scraper if available)
-        df = pd.DataFrame({
-            "Date": pd.date_range(end=datetime.today(), periods=30),
-            "Open": [100 + i for i in range(30)],
-            "High": [105 + i for i in range(30)],
-            "Low": [95 + i for i in range(30)],
-            "Close": [100 + i for i in range(30)],
-            "Volume": [100000 + 10*i for i in range(30)],
-            "Symbol": [symbol]*30
-        })
+        url = f"https://chartink.com/stocks/{symbol.lower()}.html"
+        response = requests.get(url)
+        if response.status_code != 200:
+            print(f"❌ Chartink request failed for {symbol}")
+            return None
 
-        with sqlite3.connect(DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS prices (
-                    Symbol TEXT,
-                    Date TEXT,
-                    Open REAL,
-                    High REAL,
-                    Low REAL,
-                    Close REAL,
-                    Volume REAL
-                )
-                """
-            )
-            df.to_sql("prices", conn, if_exists="append", index=False)
-        print(f"✅{symbol} inserted into DB from Chartink fallback")
-        return True
+        # Extract table using pandas (assumes chartink exposes table)
+        tables = pd.read_html(response.text)
+        if not tables:
+            print(f"❌ No tables found for {symbol} on Chartink")
+            return None
+
+        df = tables[0]
+        if 'Date' not in df.columns:
+            print(f"❌ Table structure invalid for {symbol}")
+            return None
+
+        df = df.rename(columns={
+            'Open': 'Open', 'High': 'High', 'Low': 'Low',
+            'Close': 'Close', 'Volume': 'Volume', 'Date': 'Date'
+        })
+        df = df[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
+        insert_into_prices_table(df, symbol)
+        print(f"✅ Chartink data inserted for {symbol}")
+        return df
 
     except Exception as e:
-        print(f"❌Chartink fetch failed for {symbol}: {e}")
-        return False
+        print(f"❌ Exception in Chartink fallback for {symbol}: {e}")
+        return None
 
-def main():
-    for i, symbol in enumerate(list(STOCKS.keys())[:3], 1):  # TEMP TEST on 3 stocks
-        print(f"\n[{i}/3] Trying Chartink fallback for {symbol}")
-        fetch_chartink(symbol)
+def fetch_all_fallback_chartink():
+    for i, symbol in enumerate(STOCKS.keys(), 1):
+        print(f"[{i}/{len(STOCKS)}] [Chartink Fallback] {symbol}")
+        fetch_fallback_chartink(symbol)
+        time.sleep(1.5)  # Politeness delay
 
 if __name__ == "__main__":
-    main()
+    fetch_all_fallback_chartink()
