@@ -1,57 +1,41 @@
-# fetch_and_cache_all.py
-
-from fetch_from_yf import fetch_yf
-from fallback_eod import fetch_eodhistorical
-from fallback_chartink import fetch_chartink
-from fallback_bse import fetch_bse
+# fetch_and_cache_all.py — master fallback-integrated EOD fetcher
+from fetch_from_yf import fetch_from_yf
+from fallback_eod import fetch_fallback_eod
+from fallback_chartink import fetch_fallback_chartink
+from fallback_bse import fetch_fallback_bse
 from stocks import STOCKS
+from utils import insert_into_prices_table
 import time
 
-def fetch_with_fallbacks(symbol):
-    print(f"[📦] Fetching {symbol} from Yahoo Finance: 8y range")
-    try:
-        success = fetch_yf(symbol)
-        if success:
-            print(f"✅ {symbol} inserted into DB from Yahoo Finance.")
-            return
-    except Exception as e:
-        print(f"❌ Yahoo failed for {symbol}: {e}")
+def fetch_and_cache_all():
+    for i, symbol in enumerate(STOCKS.keys(), 1):
+        print(f"\n[{i}/{len(STOCKS)}] Fetching {symbol} from Yahoo Finance...")
+        df = fetch_from_yf(symbol)
+        if df is not None:
+            if insert_into_prices_table(df, symbol):
+                print(f"✅ {symbol} inserted into DB from Yahoo Finance.")
+                continue
 
-    print(f"📉 Trying fallback: EOD Historical for {symbol}")
-    try:
-        success = fetch_eodhistorical(symbol)
-        if success:
+        print(f"🔁 Yahoo failed for {symbol}, trying EOD Historical...")
+        df = fetch_fallback_eod(symbol)
+        if df is not None and insert_into_prices_table(df, symbol):
             print(f"✅ {symbol} inserted into DB from EOD Historical.")
-            return
-    except Exception as e:
-        print(f"❌ EOD Historical failed for {symbol}: {e}")
+            continue
 
-    print(f"📉 Trying fallback: Chartink for {symbol}")
-    try:
-        success = fetch_chartink(symbol)
-        if success:
+        print(f"🔁 EOD failed, trying Chartink for {symbol}...")
+        df = fetch_fallback_chartink(symbol)
+        if df is not None and insert_into_prices_table(df, symbol):
             print(f"✅ {symbol} inserted into DB from Chartink.")
-            return
-    except Exception as e:
-        print(f"❌ Chartink failed for {symbol}: {e}")
+            continue
 
-    print(f"📉 Trying fallback: BSE for {symbol}")
-    try:
-        success = fetch_bse(symbol)
-        if success:
+        print(f"🔁 Chartink failed, trying BSE for {symbol}...")
+        df = fetch_fallback_bse(symbol)
+        if df is not None and insert_into_prices_table(df, symbol):
             print(f"✅ {symbol} inserted into DB from BSE.")
-            return
-    except Exception as e:
-        print(f"❌ BSE failed for {symbol}: {e}")
+            continue
 
-    print(f"❌ Skipped {symbol}: No usable data")
-
-def main():
-    symbols = list(STOCKS.keys())
-    for idx, symbol in enumerate(symbols):
-        print(f"\n[{idx+1}/{len(symbols)}] Processing: {symbol}")
-        fetch_with_fallbacks(symbol)
-        time.sleep(1)  # respectful rate limiting
+        print(f"❌ All sources failed for {symbol} — skipping.")
+        time.sleep(1.2)
 
 if __name__ == "__main__":
-    main()
+    fetch_and_cache_all()
