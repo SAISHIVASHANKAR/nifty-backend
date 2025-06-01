@@ -40,3 +40,14 @@ def load_price_data(symbol):
     df['date'] = pd.to_datetime(df['date'])
     df.set_index('date', inplace=True)
     return df
+
+def insert_indicator_signal(conn, symbol, trend, momentum, volume, volatility, support_resistance):
+    """
+    Inserts computed signals into the database.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT OR REPLACE INTO signals (symbol, trend, momentum, volume, volatility, support_resistance)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (symbol, trend, momentum, volume, volatility, support_resistance))
+    conn.commit()
