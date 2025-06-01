@@ -1,52 +1,51 @@
-# fallback_eod.py
-
+# fallback_eod.py (with EODHistorical token and proper DB insert)
+import requests
 import pandas as pd
-import sqlite3
-from datetime import datetime, timedelta
+from utils import insert_into_prices_table
 from stocks import STOCKS
+from datetime import datetime
+import time
 
-DB_PATH = "nifty_stocks.db"
+API_TOKEN = "683461c4e4da71.25040803"
 
-def fetch_from_eodhistorical(symbol, token=None):  # token param kept for compatibility
-    print(f"📦Fetching {symbol} from EOD Historical (mock)")
-
+def fetch_fallback_eod(symbol):
     try:
-        # Mock 10-day data for fallback simulation
-        df = pd.DataFrame({
-            "Date": pd.date_range(end=datetime.today(), periods=10),
-            "Open": [300 + i for i in range(10)],
-            "High": [305 + i for i in range(10)],
-            "Low": [295 + i for i in range(10)],
-            "Close": [300 + i for i in range(10)],
-            "Volume": [60000 + 10*i for i in range(10)],
-            "Symbol": [symbol]*10
-        })
+        url = f"https://eodhistoricaldata.com/api/eod/{symbol}.NSE?api_token={API_TOKEN}&fmt=csv"
+        response = requests.get(url)
+        if response.status_code != 200:
+            print(f"❌ EOD fallback failed for {symbol}: Status {response.status_code}")
+            return None
 
-        with sqlite3.connect(DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS prices (
-                    Symbol TEXT,
-                    Date TEXT,
-                    Open REAL,
-                    High REAL,
-                    Low REAL,
-                    Close REAL,
-                    Volume REAL
-                )
-            ''')
-            df.to_sql("prices", conn, if_exists="append", index=False)
-        print(f"✅{symbol} inserted into DB from EOD Historical fallback")
+        from io import StringIO
+        df = pd.read_csv(StringIO(response.text))
+
+        if 'date' not in df.columns:
+            print(f"❌ Invalid CSV structure for {symbol}")
+            return None
+
+        df.rename(columns={
+            'date': 'Date',
+            'open': 'Open',
+            'high': 'High',
+            'low': 'Low',
+            'close': 'Close',
+            'volume': 'Volume'
+        }, inplace=True)
+
+        df = df[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
+        insert_into_prices_table(df, symbol)
+        print(f"✅ {symbol} inserted from EOD API")
         return df
 
     except Exception as e:
-        print(f"❌EOD Historical fallback failed for {symbol}: {e}")
+        print(f"❌ Exception during fallback EOD for {symbol}: {e}")
         return None
 
-def main():
-    for i, symbol in enumerate(list(STOCKS.keys())[:3], 1):  # TEMP TEST: First 3 symbols
-        print(f"\n[{i}/3] Trying EOD fallback for {symbol}")
-        fetch_from_eodhistorical(symbol, token="demo")
+def fetch_all_fallback_eod():
+    for i, symbol in enumerate(STOCKS.keys(), 1):
+        print(f"[{i}/{len(STOCKS)}] [Fallback EOD] Fetching: {symbol}")
+        fetch_fallback_eod(symbol)
+        time.sleep(1.2)  # Respect API rate limits
 
 if __name__ == "__main__":
-    main()
+    fetch_all_fallback_eod()
