@@ -10,11 +10,11 @@ DB_PATH = "nifty_stocks.db"
 def get_cached_df(symbol):
     """
     Loads the cached CSV for a given stock symbol from /mnt/yf_cache.
-    Returns a pandas DataFrame with a parsed 'Date' column.
+    Returns a pandas DataFrame with parsed dates and date index.
     """
     path = os.path.join(CACHE_DIR, f"{symbol}.csv")
     if not os.path.exists(path):
-        raise FileNotFoundError(f"No cache file for {symbol}")
+        raise FileNotFoundError(f"Missing cache file for {symbol}")
     
     df = pd.read_csv(path)
     df['Date'] = pd.to_datetime(df['Date'])
@@ -23,11 +23,11 @@ def get_cached_df(symbol):
 
 def load_price_data(symbol):
     """
-    Loads historical OHLCV data for a given stock symbol from the SQLite database.
-    Returns a pandas DataFrame indexed by date.
+    Loads OHLCV data for a stock symbol from the SQLite database.
+    Returns a DataFrame with date index.
     """
     if not os.path.exists(DB_PATH):
-        raise FileNotFoundError("Database not found")
+        raise FileNotFoundError("nifty_stocks.db not found")
 
     conn = sqlite3.connect(DB_PATH)
     query = f"""
