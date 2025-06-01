@@ -1,36 +1,36 @@
-# fetch_and_cache_all.py — master fallback-integrated EOD fetcher
-from fetch_from_yf import fetch_from_yf
-from fallback_eod import fetch_fallback_eod
-from fallback_chartink import fetch_fallback_chartink
-from fallback_bse import fetch_fallback_bse
+# fetch_and_cache_all.py
 from stocks import STOCKS
-import time
+from fetch_from_yf import fetch_yf
+from fallback_eod import fetch_eodhistorical
+from fallback_chartink import fetch_chartink
+from fallback_bse import fetch_bse
 
-def fetch_and_cache_all():
+def main():
+    print("🚀 Starting full EOD fetch process...\n")
+
     for i, symbol in enumerate(STOCKS.keys(), 1):
         print(f"\n[{i}/{len(STOCKS)}] Fetching {symbol} from Yahoo Finance...")
-        df = fetch_from_yf(symbol)
 
-        if df is not None:
-            print(f"✅ {symbol} fetched successfully from Yahoo Finance.")
+        success = fetch_yf(symbol)
+        if success:
+            print(f"✅ {symbol} inserted into DB from Yahoo Finance.")
             continue
 
-        print(f"🔁 Yahoo failed for {symbol}, trying EOD Historical...")
-        df = fetch_fallback_eod(symbol)
-        if df is not None:
+        print(f"⚠️ Yahoo failed. Trying fallback sources for {symbol}...")
+
+        if fetch_eodhistorical(symbol):
+            print(f"✅ {symbol} inserted from EOD Historical.")
             continue
 
-        print(f"🔁 EOD failed, trying Chartink for {symbol}...")
-        df = fetch_fallback_chartink(symbol)
-        if df is not None:
+        if fetch_chartink(symbol):
+            print(f"✅ {symbol} inserted from Chartink.")
             continue
 
-        print(f"🔁 Chartink failed, trying BSE for {symbol}...")
-        df = fetch_fallback_bse(symbol)
-        if df is None:
-            print(f"❌ All sources failed for {symbol} — skipping.")
+        if fetch_bse(symbol):
+            print(f"✅ {symbol} inserted from BSE.")
+            continue
 
-        time.sleep(1.2)
+        print(f"❌ Skipped {symbol}: No usable data from any source.")
 
 if __name__ == "__main__":
-    fetch_and_cache_all()
+    main()
