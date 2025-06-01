@@ -42,5 +42,14 @@ def get_cached_df(symbol):
         return pd.DataFrame()
 
 def symbol_has_data(symbol):
-    df = get_cached_df(symbol)
-    return not df.empty
+    try:
+        conn = get_db_connection()
+        query = "SELECT 1 FROM prices WHERE symbol = ? LIMIT 1"
+        cur = conn.cursor()
+        cur.execute(query, (symbol,))
+        result = cur.fetchone()
+        conn.close()
+        return result is not None
+    except Exception as e:
+        print(f"DB check failed for {symbol}: {e}")
+        return False
