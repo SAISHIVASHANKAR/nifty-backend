@@ -1,9 +1,9 @@
 # fetch_from_yf.py
 
 import yfinance as yf
+from datetime import datetime, timedelta
 from utils import insert_into_prices_table
 from stocks import STOCKS
-from datetime import datetime, timedelta
 
 def fetch_yf(symbol, years=8):
     end = datetime.now()
@@ -13,7 +13,7 @@ def fetch_yf(symbol, years=8):
         if not df.empty:
             df.reset_index(inplace=True)
             df['Symbol'] = symbol
-            insert_into_prices_table(df, symbol)  # ✅ fixed: added symbol argument
+            insert_into_prices_table(df, symbol)  # ✅ REQUIRED ARGUMENT
             print(f"✅ {symbol} fetched from Yahoo ({years}y)")
             return df
         else:
