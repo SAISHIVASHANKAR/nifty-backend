@@ -38,3 +38,7 @@ for symbol in STOCKS.keys():
 conn.commit()
 conn.close()
 print("\n✅ Done. All available signals inserted into indicator_signals.db.")
+
+if df is None or df.empty:
+    print(f"⚠️ Skipping {symbol}: No usable data")
+    continue
