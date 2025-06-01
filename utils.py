@@ -34,7 +34,10 @@ def insert_price_data(conn, df, symbol):
     df["Symbol"] = str(symbol)  # Ensure symbol is str
     df = df[["Symbol", "Date", "Open", "High", "Low", "Close", "Volume"]]
 
-    # Fix for unsupported types: convert to native Python types
+    # Drop rows with missing values
+    df = df.dropna()
+
+    # Force native Python types using applymap
     df = df.astype({
         "Symbol": str,
         "Date": str,
@@ -45,7 +48,18 @@ def insert_price_data(conn, df, symbol):
         "Volume": float
     })
 
-    tuples = list(df.itertuples(index=False, name=None))
+    tuples = [
+        (
+            str(row["Symbol"]),
+            str(row["Date"]),
+            float(row["Open"]),
+            float(row["High"]),
+            float(row["Low"]),
+            float(row["Close"]),
+            float(row["Volume"])
+        )
+        for _, row in df.iterrows()
+    ]
 
     try:
         with conn:
