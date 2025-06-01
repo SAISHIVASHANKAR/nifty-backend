@@ -1,39 +1,31 @@
 # fetch_from_yf.py
 
 import yfinance as yf
-import pandas as pd
-from utils import insert_into_prices_table
+from datetime import datetime, timedelta
+from utils import insert_into_prices_table, symbol_has_data
 
-def fetch_from_yf(symbol: str) -> bool:
-    try:
-        print(f"Attempting Yahoo Finance fetch for {symbol}")
+def fetch_from_yf(symbol):
+    if symbol_has_data(symbol):
+        print(f"⏭️ Skipping {symbol}: already exists in DB.")
+        return True
 
-        for period in ["8y", "7y", "6y", "5y", "4y", "3y", "2y", "1y"]:
-            print(f"Trying {symbol} for period: {period}")
-            data = yf.download(f"{symbol}.NS", period=period, interval="1d")
+    for years in range(8, 0, -1):
+        try:
+            end = datetime.today()
+            start = end - timedelta(days=365 * years)
+            print(f"🔹 Trying {years} year(s) for {symbol}...")
+            df = yf.download(f"{symbol}.NS", start=start, end=end)
 
-            if data is not None and not data.empty:
-                data.reset_index(inplace=True)
-                data = data.rename(columns={
-                    "Date": "Date",
-                    "Open": "Open",
-                    "High": "High",
-                    "Low": "Low",
-                    "Close": "Close",
-                    "Volume": "Volume"
-                })
+            if df.empty:
+                continue
 
-                data = data[["Date", "Open", "High", "Low", "Close", "Volume"]].dropna()
-                data["Date"] = pd.to_datetime(data["Date"]).dt.strftime("%Y-%m-%d")
+            df.reset_index(inplace=True)
+            success = insert_into_prices_table(df, symbol)
+            if success:
+                return True
+        except Exception as e:
+            print(f"Yahoo fetch failed for {symbol} ({years}y): {e}")
+            continue
 
-                success = insert_into_prices_table(data, symbol)
-                return success
-            else:
-                print(f"No data found for {symbol} with period {period}, trying fallback period...")
-
-        print(f"Yahoo Finance fetch failed for {symbol} after all fallbacks")
-        return False
-
-    except Exception as e:
-        print(f"Yahoo Finance exception for {symbol}: {e}")
-        return False
+    print(f"❌ Failed to fetch from Yahoo: {symbol}")
+    return False
