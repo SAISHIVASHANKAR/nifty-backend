@@ -1,13 +1,16 @@
 # fetch_and_cache_all.py
 
-import yfinance as yf
+import time
 import sqlite3
 import pandas as pd
 from stocks import STOCKS
-from datetime import datetime
-import time
+from fetch_from_yf import fetch_yf
+from fallback_eod import fetch_from_eodhistorical
+from fallback_chartink import fetch_chartink
+from fallback_bse import fetch_bse
 
 DB_PATH = "nifty_stocks.db"
+EOD_API_TOKEN = "683461c4e4da71.25040803"
 
 def create_prices_table():
     conn = sqlite3.connect(DB_PATH)
@@ -28,43 +31,49 @@ def create_prices_table():
 def insert_to_db(symbol, df):
     if df is None or df.empty:
         return
-    conn = sqlite3.connect(DB_PATH)
     df["Symbol"] = symbol
+    conn = sqlite3.connect(DB_PATH)
     df.to_sql("prices", conn, if_exists="append", index=False)
     conn.close()
 
-def fetch_from_yahoo(symbol, years):
-    try:
-        print(f"📦 Fetching {symbol} for {years}y")
-        df = yf.download(f"{symbol}.NS", period=f"{years}y", interval="1d", progress=False)
-        if df.empty:
-            return None
-        df = df.reset_index()
-        df = df[["Date", "Open", "High", "Low", "Close", "Volume"]]
-        df.dropna(inplace=True)
-        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
+def fetch_with_fallbacks(symbol):
+    for y in range(8, 0, -1):
+        df = fetch_yf(symbol, y)
+        if df is not None and not df.empty:
+            print(f"✅ {symbol} fetched from Yahoo ({y}y)")
+            return df
+
+    df = fetch_from_eodhistorical(symbol, EOD_API_TOKEN)
+    if df is not None and not df.empty:
+        print(f"✅ {symbol} fetched from EOD Historical")
         return df
-    except Exception as e:
-        print(f"⚠️ Error fetching {symbol} for {years}y: {e}")
-        return None
+
+    df = fetch_chartink(symbol)
+    if df is not None and not df.empty:
+        print(f"✅ {symbol} fetched from Chartink")
+        return df
+
+    df = fetch_bse(symbol)
+    if df is not None and not df.empty:
+        print(f"✅ {symbol} fetched from BSE")
+        return df
+
+    print(f"❌ {symbol} fetch failed from all sources")
+    return None
 
 def main():
     create_prices_table()
     total = len(STOCKS)
-    for idx, symbol in enumerate(STOCKS, start=1):
+    for idx, symbol in enumerate(STOCKS.keys(), 1):
         print(f"\n[{idx}/{total}] Processing: {symbol}")
-        for y in range(8, 0, -1):
-            df = fetch_from_yahoo(symbol, y)
-            if df is not None and not df.empty:
-                try:
-                    insert_to_db(symbol, df)
-                    print(f"✅ Inserted {symbol} ({len(df)} rows)")
-                    break
-                except Exception as e:
-                    print(f"❌ Insert error for {symbol}: {e}")
-            time.sleep(1)
-        else:
-            print(f"❌ Skipped {symbol}: No usable data")
+        df = fetch_with_fallbacks(symbol)
+        if df is not None:
+            try:
+                insert_to_db(symbol, df)
+                print(f"🟢 {symbol} inserted ({len(df)} rows)")
+            except Exception as e:
+                print(f"❌ DB insert error for {symbol}: {e}")
+        time.sleep(1)
 
 if __name__ == "__main__":
     main()
