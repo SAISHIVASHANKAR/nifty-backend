@@ -1,5 +1,4 @@
 # init_db.py
-
 import sqlite3
 
 DB_PATH = "nifty_stocks.db"
@@ -10,18 +9,18 @@ def init_prices_table():
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS prices (
-                Symbol TEXT,
                 Date TEXT,
                 Open REAL,
                 High REAL,
                 Low REAL,
                 Close REAL,
-                Volume REAL
+                Volume INTEGER,
+                Symbol TEXT
             )
         """)
         conn.commit()
         conn.close()
-        print("✅ 'prices' table created or already exists in nifty_stocks.db")
+        print("✅ 'prices' table created or verified successfully.")
     except Exception as e:
         print(f"❌ Error initializing DB: {e}")
 
