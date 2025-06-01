@@ -1,28 +1,53 @@
 import sqlite3
 import pandas as pd
+from datetime import datetime
 
-# ✅ Load EOD prices for a symbol from SQLite
+DB_PATH = "nifty_stocks.db"
+
+def get_connection():
+    return sqlite3.connect(DB_PATH)
+
 def get_cached_df(symbol):
-    conn = sqlite3.connect("nifty_stocks.db")
-    query = f"SELECT Date, Close, High, Low, Open, Volume FROM prices WHERE Symbol = ?"
+    conn = get_connection()
+    query = f"""
+        SELECT Date, Close, High, Low, Open, Volume
+        FROM prices
+        WHERE Symbol = ?
+        ORDER BY Date ASC
+    """
     try:
         df = pd.read_sql(query, conn, params=(symbol,), parse_dates=["Date"])
-        df.sort_values("Date", inplace=True)
-        df.reset_index(drop=True, inplace=True)
         return df
     except Exception as e:
-        print(f"❌ Failed to load cached data for {symbol}: {e}")
-        return None
-    finally:
-        conn.close()
+        print(f"⚠️ Failed to load cached data for {symbol}: {e}")
+        return pd.DataFrame()
 
-# ✅ Write EOD prices into SQLite
 def insert_into_prices_table(df, symbol):
     try:
-        conn = sqlite3.connect("nifty_stocks.db")
+        if df.empty:
+            print(f"⚠️ Empty DataFrame, skipping insert for {symbol}")
+            return False
+
+        # Ensure proper formatting
+        df = df.copy()
+        df.reset_index(inplace=True)
+        if "Date" not in df.columns:
+            df["Date"] = df["index"]
+        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
+        df["Symbol"] = symbol
+
+        required_cols = ["Symbol", "Date", "Open", "High", "Low", "Close", "Volume"]
+        for col in required_cols:
+            if col not in df.columns:
+                raise ValueError(f"Missing required column: {col}")
+
+        df = df[required_cols]
+        df.dropna(inplace=True)
+
+        conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            """
+
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS prices (
                 Symbol TEXT,
                 Date TEXT,
@@ -30,45 +55,13 @@ def insert_into_prices_table(df, symbol):
                 High REAL,
                 Low REAL,
                 Close REAL,
-                Volume REAL,
-                PRIMARY KEY (Symbol, Date)
+                Volume REAL
             )
-            """
-        )
-        df["Symbol"] = symbol
+        """)
+
         df.to_sql("prices", conn, if_exists="append", index=False)
         conn.commit()
         return True
     except Exception as e:
         print(f"❌ DB insert error for {symbol}: {e}")
         return False
-    finally:
-        conn.close()
-
-# ✅ Save technical indicator scores
-def insert_indicator_signal(symbol, trend, momentum, volume, volatility, support_resistance, total_score):
-    conn = sqlite3.connect("nifty_stocks.db")
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS indicator_signals (
-            Symbol TEXT PRIMARY KEY,
-            Trend INTEGER,
-            Momentum INTEGER,
-            Volume INTEGER,
-            Volatility INTEGER,
-            SupportResistance INTEGER,
-            TotalScore INTEGER
-        )
-        """
-    )
-    cursor.execute(
-        """
-        INSERT OR REPLACE INTO indicator_signals
-        (Symbol, Trend, Momentum, Volume, Volatility, SupportResistance, TotalScore)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (symbol, trend, momentum, volume, volatility, support_resistance, total_score)
-    )
-    conn.commit()
-    conn.close()
