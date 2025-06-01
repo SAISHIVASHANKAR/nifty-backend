@@ -1,32 +1,21 @@
-from indicators import compute_all_indicators
-from utils import load_price_data
 from stocks import STOCKS
+from utils import get_cached_df
+from indicators import compute_all_indicators
 import sqlite3
 
-# Connect to SQLite once
 conn = sqlite3.connect("indicator_signals.db")
 cursor = conn.cursor()
 
-cursor.execute("""
-    CREATE TABLE IF NOT EXISTS signals (
-        symbol TEXT PRIMARY KEY,
-        trend INTEGER,
-        momentum INTEGER,
-        volume INTEGER,
-        volatility INTEGER,
-        support_resistance INTEGER,
-        count INTEGER
-    )
-""")
+print("📊Running indicators and saving signals to indicator_signals.db")
 
-for symbol in STOCKS:
+for symbol in STOCKS.keys():
+    print(f"📈Processing: {symbol}")
     try:
-        print(f"📊 Processing: {symbol}")
-        df = load_price_data(symbol)
-        if df is not None:
-            compute_all_indicators(symbol, df, cursor)
+        df = get_cached_df(symbol)
+        compute_all_indicators(symbol, df, cursor)
+        print(f"✅{symbol} inserted.")
     except Exception as e:
-        print(f"❌ Error processing {symbol}: {e}")
+        print(f"❌Failed to insert signal for {symbol}: {e}")
 
 conn.commit()
 conn.close()
