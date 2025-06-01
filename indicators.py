@@ -1,105 +1,90 @@
-# indicators.py
-
-import pandas as pd
 import numpy as np
+import pandas as pd
+from utils import load_price_data, insert_indicator_signal
 
-def compute_rsi(df, period=15):
-    delta = df["Close"].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
+def compute_all_indicators(symbol, df, cursor):
+    trend_score = 0
+    momentum_score = 0
+    volume_score = 0
+    volatility_score = 0
+    support_resistance_score = 0
 
-def compute_macd(df, short=12, long=26, signal=9):
-    short_ema = df["Close"].ewm(span=short, adjust=False).mean()
-    long_ema = df["Close"].ewm(span=long, adjust=False).mean()
-    macd_line = short_ema - long_ema
-    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
-    return macd_line - signal_line
+    try:
+        # ADX (Trend)
+        df['14-high'] = df['High'].rolling(window=15).max()
+        df['14-low'] = df['Low'].rolling(window=15).min()
+        df['ATR'] = df['14-high'] - df['14-low']
+        df['ADX'] = df['ATR'].rolling(window=15).mean()
+        if df['ADX'].iloc[-1] > 20:
+            trend_score += 1
 
-def compute_obv(df):
-    obv = [0]
-    for i in range(1, len(df)):
-        if df["Close"].iloc[i] > df["Close"].iloc[i - 1]:
-            obv.append(obv[-1] + df["Volume"].iloc[i])
-        elif df["Close"].iloc[i] < df["Close"].iloc[i - 1]:
-            obv.append(obv[-1] - df["Volume"].iloc[i])
-        else:
-            obv.append(obv[-1])
-    return pd.Series(obv, index=df.index)
+        # VWAP (Trend)
+        df['VWAP'] = (df['Close'] * df['Volume']).cumsum() / df['Volume'].cumsum()
+        if df['Close'].iloc[-1] > df['VWAP'].iloc[-1]:
+            trend_score += 1
 
-def compute_bollinger_bands(df, period=30, std_dev=2):
-    sma = df["Close"].rolling(window=period).mean()
-    std = df["Close"].rolling(window=period).std()
-    return sma + std_dev * std, sma - std_dev * std
+        # MACD (Momentum)
+        df['EMA12'] = df['Close'].ewm(span=12, adjust=False).mean()
+        df['EMA26'] = df['Close'].ewm(span=26, adjust=False).mean()
+        df['MACD'] = df['EMA12'] - df['EMA26']
+        if df['MACD'].iloc[-1] > 0:
+            momentum_score += 1
 
-def compute_adx(df, period=15):
-    high = df["High"]
-    low = df["Low"]
-    close = df["Close"]
+        # RSI (Momentum)
+        delta = df['Close'].diff()
+        gain = delta.where(delta > 0, 0)
+        loss = -delta.where(delta < 0, 0)
+        avg_gain = gain.rolling(window=15).mean()
+        avg_loss = loss.rolling(window=15).mean()
+        rs = avg_gain / avg_loss
+        df['RSI'] = 100 - (100 / (1 + rs))
+        if df['RSI'].iloc[-1] < 70 and df['RSI'].iloc[-1] > 30:
+            momentum_score += 1
 
-    plus_dm = high.diff()
-    minus_dm = low.diff()
+        # Chaikin Oscillator (Volume)
+        adl = ((2 * df['Close'] - df['High'] - df['Low']) / (df['High'] - df['Low']) * df['Volume']).fillna(0)
+        df['Chaikin'] = adl.ewm(span=3).mean() - adl.ewm(span=10).mean()
+        if df['Chaikin'].iloc[-1] > 0:
+            volume_score += 1
 
-    plus_dm = plus_dm.where((plus_dm > minus_dm) & (plus_dm > 0), 0.0)
-    minus_dm = -minus_dm.where((minus_dm > plus_dm) & (minus_dm > 0), 0.0)
+        # OBV (Volume)
+        df['OBV'] = (np.sign(df['Close'].diff()) * df['Volume']).fillna(0).cumsum()
+        if df['OBV'].iloc[-1] > df['OBV'].iloc[-2]:
+            volume_score += 1
 
-    tr1 = high - low
-    tr2 = abs(high - close.shift())
-    tr3 = abs(low - close.shift())
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        # ATR (Volatility)
+        df['TR'] = df['High'] - df['Low']
+        df['ATR'] = df['TR'].rolling(window=15).mean()
+        if df['ATR'].iloc[-1] > 0:
+            volatility_score += 1
 
-    atr = tr.rolling(window=period).mean()
-    plus_di = 100 * (plus_dm.rolling(window=period).sum() / atr)
-    minus_di = 100 * (minus_dm.rolling(window=period).sum() / atr)
-    dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
-    return dx.rolling(window=period).mean()
+        # Bollinger Bands (Volatility)
+        df['MB'] = df['Close'].rolling(30).mean()
+        df['UB'] = df['MB'] + 2 * df['Close'].rolling(30).std()
+        df['LB'] = df['MB'] - 2 * df['Close'].rolling(30).std()
+        if df['Close'].iloc[-1] < df['UB'].iloc[-1] and df['Close'].iloc[-1] > df['LB'].iloc[-1]:
+            volatility_score += 1
 
-def compute_atr(df, period=15):
-    tr1 = df["High"] - df["Low"]
-    tr2 = abs(df["High"] - df["Close"].shift())
-    tr3 = abs(df["Low"] - df["Close"].shift())
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    return tr.rolling(window=period).mean()
+        # Gann Fan (Support/Resistance)
+        if df['Close'].iloc[-1] > df['Close'].iloc[-2]:
+            support_resistance_score += 1
 
-def compute_chaikin(df, period=15):
-    adl = ((2 * df["Close"] - df["High"] - df["Low"]) / (df["High"] - df["Low"] + 1e-9)) * df["Volume"]
-    return adl.ewm(span=period, adjust=False).mean()
+        # Fibonacci Retracement (Support/Resistance)
+        max_price = df['Close'].max()
+        min_price = df['Close'].min()
+        fib_618 = max_price - 0.618 * (max_price - min_price)
+        if df['Close'].iloc[-1] > fib_618:
+            support_resistance_score += 1
 
-def compute_vwap(df, period=10):
-    tpv = ((df["High"] + df["Low"] + df["Close"]) / 3) * df["Volume"]
-    return tpv.rolling(window=period).sum() / df["Volume"].rolling(window=period).sum()
+    except Exception as e:
+        print(f"⚠️ Error computing indicators for {symbol}: {e}")
 
-def compute_fibonacci(df):
-    max_price = df["High"].max()
-    min_price = df["Low"].min()
-    diff = max_price - min_price
-    return {
-        "0.0%": max_price,
-        "23.6%": max_price - 0.236 * diff,
-        "38.2%": max_price - 0.382 * diff,
-        "50.0%": max_price - 0.500 * diff,
-        "61.8%": max_price - 0.618 * diff,
-        "100.0%": min_price
-    }
-
-def compute_gann_fan(df):
-    base_price = df["Close"].iloc[0]
-    slope = 1
-    return pd.Series([base_price + slope * i for i in range(len(df))], index=df.index)
-
-def compute_all_indicators(symbol, df):
-    return {
-        "symbol": symbol,
-        "rsi": compute_rsi(df).iloc[-1],
-        "macd": compute_macd(df).iloc[-1],
-        "obv": compute_obv(df).iloc[-1],
-        "bollinger_upper": compute_bollinger_bands(df)[0].iloc[-1],
-        "bollinger_lower": compute_bollinger_bands(df)[1].iloc[-1],
-        "adx": compute_adx(df).iloc[-1],
-        "atr": compute_atr(df).iloc[-1],
-        "chaikin": compute_chaikin(df).iloc[-1],
-        "vwap": compute_vwap(df).iloc[-1],
-        "gann": compute_gann_fan(df).iloc[-1],
-        "fibonacci_50": compute_fibonacci(df)["50.0%"]
-    }
+    insert_indicator_signal(
+        cursor,
+        symbol,
+        trend_score,
+        momentum_score,
+        volume_score,
+        volatility_score,
+        support_resistance_score
+    )
