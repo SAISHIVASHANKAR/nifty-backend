@@ -1,59 +1,58 @@
-# fetch_from_yf.py
 import yfinance as yf
 import sqlite3
 import pandas as pd
 from stocks import STOCKS
 from datetime import datetime
-import time
+import os
 
 DB_PATH = "nifty_stocks.db"
 
-def insert_to_db(symbol, df):
-    conn = sqlite3.connect(DB_PATH)
-    df["Symbol"] = symbol
-    df.to_sql("prices", conn, if_exists="append", index=False)
-    conn.close()
-
-def fetch_yf(symbol, years):
+def fetch_and_store(symbol, years=8):
+    print(f"📦Fetching {symbol} for {years}y")
     try:
-        print(f"📦Fetching {symbol} for {years}y")
-        period = f"{years}y"
-        df = yf.download(f"{symbol}.NS", period=period)
+        df = yf.download(f"{symbol}.NS", period=f"{years}y", auto_adjust=True)
+
         if df.empty:
-            return None
-        df = df.reset_index()
-        df = df[["Date", "Open", "High", "Low", "Close", "Volume"]]
-        return df
+            print(f"⚠️No data for {symbol} ({years}y)")
+            return False
+
+        df.reset_index(inplace=True)
+        df["Symbol"] = symbol
+        df.columns = [col.name if hasattr(col, "name") else col for col in df.columns]
+        df = df[["Date", "Open", "High", "Low", "Close", "Volume", "Symbol"]]
+
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS prices (
+                    Symbol TEXT,
+                    Date TEXT,
+                    Open REAL,
+                    High REAL,
+                    Low REAL,
+                    Close REAL,
+                    Volume REAL
+                )
+                """
+            )
+            df.to_sql("prices", conn, if_exists="append", index=False)
+        print(f"✅{symbol} fetched from Yahoo ({years}y)")
+        return True
+
     except Exception as e:
-        print(f"⚠️Error fetching {symbol} for {years}y: {e}")
-        return None
+        print(f"❌Error fetching {symbol} for {years}y: {e}")
+        return False
 
 def main():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute('''CREATE TABLE IF NOT EXISTS prices (
-        Symbol TEXT,
-        Date TEXT,
-        Open REAL,
-        High REAL,
-        Low REAL,
-        Close REAL,
-        Volume REAL
-    )''')
-    conn.close()
-
-    for idx, symbol in enumerate(STOCKS.keys()):
-        print(f"[{idx+1}/{len(STOCKS)}] Processing: {symbol}")
+    for i, symbol in enumerate(list(STOCKS.keys())[:3], 1):  # TEMPORARY: test on 3
+        print(f"\n[{i}/3] Processing: {symbol}")
+        success = False
         for y in range(8, 0, -1):
-            df = fetch_yf(symbol, y)
-            if df is not None and not df.empty:
-                try:
-                    insert_to_db(symbol, df)
-                    print(f"✅Inserted {symbol} ({len(df)} rows)")
-                except Exception as e:
-                    print(f"❌Insert error for {symbol}: {e}")
+            if fetch_and_store(symbol, y):
+                success = True
                 break
-            time.sleep(1)
-        else:
+        if not success:
             print(f"❌Skipped {symbol}: No usable data")
 
 if __name__ == "__main__":
