@@ -9,12 +9,11 @@ DB_PATH = "nifty_stocks.db"
 
 def get_cached_df(symbol):
     """
-    Loads the cached CSV for a given stock symbol from /mnt/yf_cache.
-    Returns a pandas DataFrame with parsed dates and date index.
+    Loads the cached Yahoo Finance CSV for a given stock.
     """
     path = os.path.join(CACHE_DIR, f"{symbol}.csv")
     if not os.path.exists(path):
-        raise FileNotFoundError(f"Missing cache file for {symbol}")
+        raise FileNotFoundError(f"Cached file not found: {path}")
     
     df = pd.read_csv(path)
     df['Date'] = pd.to_datetime(df['Date'])
@@ -23,14 +22,13 @@ def get_cached_df(symbol):
 
 def load_price_data(symbol):
     """
-    Loads OHLCV data for a stock symbol from the SQLite database.
-    Returns a DataFrame with date index.
+    Loads OHLCV data from SQLite DB for the given stock symbol.
     """
     if not os.path.exists(DB_PATH):
         raise FileNotFoundError("nifty_stocks.db not found")
-
+    
     conn = sqlite3.connect(DB_PATH)
-    query = f"""
+    query = """
         SELECT date, open, high, low, close, volume
         FROM price_data
         WHERE symbol = ?
@@ -38,7 +36,7 @@ def load_price_data(symbol):
     """
     df = pd.read_sql_query(query, conn, params=(symbol,))
     conn.close()
-
+    
     df['date'] = pd.to_datetime(df['date'])
     df.set_index('date', inplace=True)
     return df
