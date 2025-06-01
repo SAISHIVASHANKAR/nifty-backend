@@ -40,3 +40,7 @@ def get_cached_df(symbol):
     except Exception as e:
         print(f"Error loading from DB for {symbol}: {e}")
         return pd.DataFrame()
+
+def symbol_has_data(symbol):
+    df = get_cached_df(symbol)
+    return not df.empty
