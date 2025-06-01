@@ -28,3 +28,30 @@ def insert_indicator_signal(symbol, indicator, signal_type, signal_value, streng
 
     conn.commit()
     conn.close()
+
+def insert_price_data(conn, df, symbol):
+    df = df.copy()
+    df["Symbol"] = str(symbol)  # Ensure symbol is str
+    df = df[["Symbol", "Date", "Open", "High", "Low", "Close", "Volume"]]
+
+    # Fix for unsupported types: convert to native Python types
+    df = df.astype({
+        "Symbol": str,
+        "Date": str,
+        "Open": float,
+        "High": float,
+        "Low": float,
+        "Close": float,
+        "Volume": float
+    })
+
+    tuples = list(df.itertuples(index=False, name=None))
+
+    try:
+        with conn:
+            conn.executemany("""
+                INSERT INTO prices (Symbol, Date, Open, High, Low, Close, Volume)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, tuples)
+    except Exception as e:
+        print(f"❌ Insert failed for {symbol}: {e}")
