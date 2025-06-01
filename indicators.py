@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from utils import load_price_data, insert_indicator_signal
+from utils import insert_indicator_signal
 
 def compute_all_indicators(symbol, df, cursor):
     trend_score = 0
@@ -38,7 +38,7 @@ def compute_all_indicators(symbol, df, cursor):
         avg_loss = loss.rolling(window=15).mean()
         rs = avg_gain / avg_loss
         df['RSI'] = 100 - (100 / (1 + rs))
-        if df['RSI'].iloc[-1] < 70 and df['RSI'].iloc[-1] > 30:
+        if 30 < df['RSI'].iloc[-1] < 70:
             momentum_score += 1
 
         # Chaikin Oscillator (Volume)
@@ -62,7 +62,7 @@ def compute_all_indicators(symbol, df, cursor):
         df['MB'] = df['Close'].rolling(30).mean()
         df['UB'] = df['MB'] + 2 * df['Close'].rolling(30).std()
         df['LB'] = df['MB'] - 2 * df['Close'].rolling(30).std()
-        if df['Close'].iloc[-1] < df['UB'].iloc[-1] and df['Close'].iloc[-1] > df['LB'].iloc[-1]:
+        if df['LB'].iloc[-1] < df['Close'].iloc[-1] < df['UB'].iloc[-1]:
             volatility_score += 1
 
         # Gann Fan (Support/Resistance)
@@ -76,8 +76,21 @@ def compute_all_indicators(symbol, df, cursor):
         if df['Close'].iloc[-1] > fib_618:
             support_resistance_score += 1
 
-    except Exception as e:
-        print(f"⚠️ Error computing indicators for {symbol}: {e}")
+        # Total count
+        count = trend_score + momentum_score + volume_score + volatility_score + support_resistance_score
 
-    total_score = trend + momentum + volume + volatility + support_resistance
-    insert_indicator_signal(conn, symbol, trend, momentum, volume, volatility, support_resistance, count)
+        insert_indicator_signal(
+            cursor,
+            symbol,
+            trend_score,
+            momentum_score,
+            volume_score,
+            volatility_score,
+            support_resistance_score,
+            count
+        )
+
+        print(f"✅ {symbol} inserted: Total Score = {count}")
+
+    except Exception as e:
+        print(f"❌ Error processing {symbol}: {e}")
