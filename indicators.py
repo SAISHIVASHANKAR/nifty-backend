@@ -80,4 +80,4 @@ def compute_all_indicators(symbol, df, cursor):
         print(f"⚠️ Error computing indicators for {symbol}: {e}")
 
     total_score = trend + momentum + volume + volatility + support_resistance
-    insert_indicator_signal(conn, symbol, trend, momentum, volume, volatility, support_resistance, total_score)
+    insert_indicator_signal(conn, symbol, trend, momentum, volume, volatility, support_resistance, count)
