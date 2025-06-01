@@ -1,52 +1,48 @@
+# fallback_bse.py (SQLite-compatible version)
+import requests
 import pandas as pd
-import sqlite3
-from datetime import datetime, timedelta
+from utils import insert_into_prices_table
 from stocks import STOCKS
+import time
+from datetime import datetime
 
-DB_PATH = "nifty_stocks.db"
-
-def fetch_bse(symbol):
-    print(f"📦Fetching {symbol} from BSE (mock)")
-
+def fetch_fallback_bse(symbol):
     try:
-        # Mock BSE fallback data generator
-        df = pd.DataFrame({
-            "Date": pd.date_range(end=datetime.today(), periods=10),
-            "Open": [200 + i for i in range(10)],
-            "High": [205 + i for i in range(10)],
-            "Low": [195 + i for i in range(10)],
-            "Close": [200 + i for i in range(10)],
-            "Volume": [50000 + 10*i for i in range(10)],
-            "Symbol": [symbol]*10
-        })
+        url = f"https://www.bseindia.com/stock-share-price/stockreach_stockquote.aspx?scripcode={symbol}&flag=sp"  # Note: placeholder
+        response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        if response.status_code != 200:
+            print(f"❌ BSE request failed for {symbol}")
+            return None
 
-        with sqlite3.connect(DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS prices (
-                    Symbol TEXT,
-                    Date TEXT,
-                    Open REAL,
-                    High REAL,
-                    Low REAL,
-                    Close REAL,
-                    Volume REAL
-                )
-                """
-            )
-            df.to_sql("prices", conn, if_exists="append", index=False)
-        print(f"✅{symbol} inserted into DB from BSE fallback")
-        return True
+        tables = pd.read_html(response.text)
+        if not tables:
+            print(f"❌ No data found for {symbol} from BSE")
+            return None
+
+        df = tables[0]  # BSE often places historical data in the first table
+
+        if 'Date' not in df.columns:
+            print(f"❌ Missing 'Date' in BSE response for {symbol}")
+            return None
+
+        df = df.rename(columns={
+            'Open': 'Open', 'High': 'High', 'Low': 'Low',
+            'Close': 'Close', 'Volume': 'Volume', 'Date': 'Date'
+        })
+        df = df[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
+        insert_into_prices_table(df, symbol)
+        print(f"✅ BSE fallback inserted for {symbol}")
+        return df
 
     except Exception as e:
-        print(f"❌BSE fetch failed for {symbol}: {e}")
-        return False
+        print(f"❌ Exception in fallback_bse for {symbol}: {e}")
+        return None
 
-def main():
-    for i, symbol in enumerate(list(STOCKS.keys())[:3], 1):  # TEMP TEST for 3 stocks
-        print(f"\n[{i}/3] Trying BSE fallback for {symbol}")
-        fetch_bse(symbol)
+def fetch_all_fallback_bse():
+    for i, symbol in enumerate(STOCKS.keys(), 1):
+        print(f"[{i}/{len(STOCKS)}] [BSE Fallback] {symbol}")
+        fetch_fallback_bse(symbol)
+        time.sleep(1.5)
 
 if __name__ == "__main__":
-    main()
+    fetch_all_fallback_bse()
