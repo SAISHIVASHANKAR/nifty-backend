@@ -45,26 +45,30 @@ def insert_indicator_signal(conn, symbol, trend, momentum, volume, volatility, s
 
 import pandas as pd
 
+import pandas as pd
+import os
+
 def get_cached_df(symbol):
+    path = f"/mnt/yf_cache/{symbol}.csv"
+    if not os.path.exists(path):
+        return None
+
     try:
-        path = f"/mnt/yf_cache/{symbol}.csv"
-        df = pd.read_csv(path, skiprows=1)
+        df = pd.read_csv(path)
 
-        # Rename based on available columns
-        df.columns = [col.strip().split('.')[0] for col in df.columns]
-        cols = df.columns.tolist()
+        # Drop second row if it contains repeated headers
+        if df.iloc[0].str.contains(symbol).sum() >= 3:
+            df = df[1:]
 
-        # Reorder to our required order
-        expected = ["Date", "Open", "High", "Low", "Close", "Volume"]
-        if not all(col in cols for col in expected):
-            print(f"⚠️ Skipping {symbol}: Missing required columns")
-            return None
+        # Coerce numeric conversion
+        cols = ['Close', 'High', 'Low', 'Open', 'Volume']
+        for col in cols:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        df = df[expected]
-        df["Date"] = pd.to_datetime(df["Date"])
-        df = df.dropna().sort_values("Date").reset_index(drop=True)
-
+        df.dropna(subset=cols, inplace=True)
+        df.reset_index(drop=True, inplace=True)
         return df
+
     except Exception as e:
-        print(f"❌ Failed to load CSV for {symbol}: {e}")
+        print(f"Error loading {symbol}.csv: {e}")
         return None
