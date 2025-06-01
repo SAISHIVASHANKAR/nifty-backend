@@ -24,26 +24,21 @@ def load_price_data(symbol):
         print(f"❌ Failed to load data for {symbol}: {e}")
         return None
 
-def insert_indicator_signal(symbol, trend, momentum, volume, volatility, support_resistance, count):
+def insert_indicator_signal(conn, symbol, trend, momentum, volume, volatility, support_resistance, count):
     try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS signals (
-                symbol TEXT PRIMARY KEY,
-                trend INTEGER,
-                momentum INTEGER,
-                volume INTEGER,
-                volatility INTEGER,
-                support_resistance INTEGER,
-                count INTEGER
-            )
-        """)
-        c.execute("""
-            INSERT OR REPLACE INTO signals (symbol, trend, momentum, volume, volatility, support_resistance, count)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO signals (symbol, trend, momentum, volume, volatility, support_resistance, count)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (symbol, trend, momentum, volume, volatility, support_resistance, count))
+        """, (
+            str(symbol),
+            int(trend),
+            int(momentum),
+            int(volume),
+            int(volatility),
+            int(support_resistance),
+            int(count)
+        ))
         conn.commit()
-        conn.close()
     except Exception as e:
         print(f"❌ Failed to insert signal for {symbol}: {e}")
