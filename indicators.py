@@ -79,12 +79,5 @@ def compute_all_indicators(symbol, df, cursor):
     except Exception as e:
         print(f"⚠️ Error computing indicators for {symbol}: {e}")
 
-    insert_indicator_signal(
-        cursor,
-        symbol,
-        trend_score,
-        momentum_score,
-        volume_score,
-        volatility_score,
-        support_resistance_score
-    )
+    total_score = trend + momentum + volume + volatility + support_resistance
+    insert_indicator_signal(conn, symbol, trend, momentum, volume, volatility, support_resistance, total_score)
