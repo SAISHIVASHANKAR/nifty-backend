@@ -1,71 +1,36 @@
+# utils.py
 import sqlite3
 import pandas as pd
-import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "nifty_stocks.db")
+DB_PATH = "nifty_stocks.db"
+SIGNAL_DB = "indicator_signals.db"
 
-# Load price data from SQLite
 def get_cached_df(symbol):
     conn = sqlite3.connect(DB_PATH)
-    query = f"SELECT Date, Close, High, Low, Open, Volume FROM prices WHERE Symbol = '{symbol}'"
-    df = pd.read_sql(query, conn, parse_dates=["Date"])
+    query = f"""
+        SELECT Date, Close, High, Low, Open, Volume
+        FROM prices
+        WHERE Symbol = ?
+        ORDER BY Date ASC
+    """
+    df = pd.read_sql(query, conn, params=(symbol,), parse_dates=["Date"])
     conn.close()
-    if df.empty or df.isnull().any().any():
-        return None
-    df.sort_values("Date", inplace=True)
-    df.reset_index(drop=True, inplace=True)
     return df
 
-# Save indicator signal to SQLite
-def insert_indicator_signal(symbol, indicator, signal_type, signal_value, strength, category, count):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute('''
-        INSERT INTO signals (symbol, indicator, signal_type, signal_value, strength, category, count)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (symbol, indicator, signal_type, signal_value, strength, category, count))
-
+def insert_indicator_signal(symbol, category, signal_type, score, count):
+    conn = sqlite3.connect(SIGNAL_DB)
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS signals (
+            Symbol TEXT,
+            Category TEXT,
+            Signal TEXT,
+            Score INTEGER,
+            Count INTEGER
+        )
+    ''')
+    conn.execute('''
+        INSERT INTO signals (Symbol, Category, Signal, Score, Count)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (symbol, category, signal_type, score, count))
     conn.commit()
     conn.close()
-
-def insert_price_data(conn, df, symbol):
-    df = df.copy()
-    df["Symbol"] = str(symbol)  # Ensure symbol is str
-    df = df[["Symbol", "Date", "Open", "High", "Low", "Close", "Volume"]]
-
-    # Drop rows with missing values
-    df = df.dropna()
-
-    # Force native Python types using applymap
-    df = df.astype({
-        "Symbol": str,
-        "Date": str,
-        "Open": float,
-        "High": float,
-        "Low": float,
-        "Close": float,
-        "Volume": float
-    })
-
-    tuples = [
-        (
-            str(row["Symbol"]),
-            str(row["Date"]),
-            float(row["Open"]),
-            float(row["High"]),
-            float(row["Low"]),
-            float(row["Close"]),
-            float(row["Volume"])
-        )
-        for _, row in df.iterrows()
-    ]
-
-    try:
-        with conn:
-            conn.executemany("""
-                INSERT INTO prices (Symbol, Date, Open, High, Low, Close, Volume)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, tuples)
-    except Exception as e:
-        print(f"❌ Insert failed for {symbol}: {e}")
