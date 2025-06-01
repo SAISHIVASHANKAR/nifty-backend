@@ -1,3 +1,4 @@
+
 # run_indicators.py
 
 import os
@@ -9,37 +10,11 @@ from stocks import STOCKS
 
 DB_PATH = "indicator_signals.db"
 
-def load_signals():
-    return sqlite3.connect(DB_PATH)
-
-def process_stock(symbol, filepath):
-    try:
-        df = pd.read_csv(filepath)
-
-        # ✅ Convert critical columns to numeric
-        for col in ["Open", "High", "Low", "Close", "Adj Close", "Volume"]:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors="coerce")
-
-        df.dropna(subset=["Close"], inplace=True)
-
-        if len(df) < 30:
-            print(f"⏩ Skipping {symbol}: Not enough data")
-            return None
-
-        return compute_all_indicators(symbol, df)
-
-    except Exception as e:
-        print(f"❌ Error processing {symbol}: {e}")
-        return None
-
-def main():
-    conn = load_signals()
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-
-    cursor.execute("DROP TABLE IF EXISTS signals")
     cursor.execute("""
-        CREATE TABLE signals (
+        CREATE TABLE IF NOT EXISTS signals (
             symbol TEXT PRIMARY KEY,
             trend INTEGER,
             momentum INTEGER,
@@ -48,24 +23,38 @@ def main():
             support_resistance INTEGER
         )
     """)
-
-    for symbol in STOCKS:
-        print(f"📊 Processing: {symbol}")
-        filepath = f"/mnt/yf_cache/{symbol}.csv"
-
-        if not os.path.exists(filepath):
-            print(f"⏩ Skipping {symbol}: No cached file")
-            continue
-
-        result = process_stock(symbol, filepath)
-        if result:
-            cursor.execute("""
-                INSERT INTO signals VALUES (?, ?, ?, ?, ?, ?)
-            """, (symbol, *result))
-
     conn.commit()
     conn.close()
-    print("✅ All signals computed and saved to indicator_signals.db")
+
+def save_signal_to_db(symbol, signal_tuple):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT OR REPLACE INTO signals
+        (symbol, trend, momentum, volume, volatility, support_resistance)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (symbol, *signal_tuple))
+    conn.commit()
+    conn.close()
+
+def process_stock(symbol):
+    try:
+        df = get_cached_df(symbol)
+        signal_tuple = compute_all_indicators(symbol, df)
+        if signal_tuple:
+            save_signal_to_db(symbol, signal_tuple)
+            print(f"âœ… Processed: {symbol}")
+        else:
+            print(f"âš ï¸ Skipped {symbol}: No data or failed indicator computation.")
+    except Exception as e:
+        print(f"âŒ Error processing {symbol}: {e}")
+
+def main():
+    print("Running indicators and saving signals to indicator_signals.db")
+    init_db()
+    for symbol in list(STOCKS.keys())[:300]:  # test mode limit, remove [:300] for full run
+        print(f"ðŸ“Š Processing: {symbol}")
+        process_stock(symbol)
 
 if __name__ == "__main__":
     main()
