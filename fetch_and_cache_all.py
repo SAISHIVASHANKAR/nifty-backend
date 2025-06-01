@@ -1,41 +1,60 @@
-# fetch_and_cache_all.py — master fallback-integrated EOD fetcher
-from fetch_from_yf import fetch_from_yf
-from fallback_eod import fetch_fallback_eod
-from fallback_chartink import fetch_fallback_chartink
-from fallback_bse import fetch_fallback_bse
+# fetch_and_cache_all.py
+
 from stocks import STOCKS
-from utils import insert_into_prices_table
-import time
+from fetch_from_yf import fetch_from_yf
+from fallback_eod import fetch_eodhistorical
+from fallback_chartink import fetch_chartink
+from fallback_bse import fetch_bse
 
-def fetch_and_cache_all():
-    for i, symbol in enumerate(STOCKS.keys(), 1):
-        print(f"\n[{i}/{len(STOCKS)}] Fetching {symbol} from Yahoo Finance...")
-        df = fetch_from_yf(symbol)
-        if df is not None:
-            if insert_into_prices_table(df, symbol):
-                print(f"✅ {symbol} inserted into DB from Yahoo Finance.")
-                continue
+print("\nStarting full fetch and cache process\n")
 
-        print(f"🔁 Yahoo failed for {symbol}, trying EOD Historical...")
-        df = fetch_fallback_eod(symbol)
-        if df is not None and insert_into_prices_table(df, symbol):
-            print(f"✅ {symbol} inserted into DB from EOD Historical.")
-            continue
+success_count = 0
+failure_count = 0
 
-        print(f"🔁 EOD failed, trying Chartink for {symbol}...")
-        df = fetch_fallback_chartink(symbol)
-        if df is not None and insert_into_prices_table(df, symbol):
-            print(f"✅ {symbol} inserted into DB from Chartink.")
-            continue
+def fetch_with_fallbacks(symbol):
+    # Try Yahoo Finance first
+    print(f"☕️Fetching {symbol} from Yahoo Finance: 8y range")
+    success = fetch_from_yf(symbol)
+    if success:
+        print(f"✅{symbol} inserted into DB from Yahoo Finance.")
+        return True
 
-        print(f"🔁 Chartink failed, trying BSE for {symbol}...")
-        df = fetch_fallback_bse(symbol)
-        if df is not None and insert_into_prices_table(df, symbol):
-            print(f"✅ {symbol} inserted into DB from BSE.")
-            continue
+    # Try EOD Historical next
+    print(f"☕️Fallback to EOD Historical for {symbol}")
+    success = fetch_eodhistorical(symbol)
+    if success:
+        print(f"✅{symbol} inserted into DB from EOD Historical.")
+        return True
 
-        print(f"❌ All sources failed for {symbol} — skipping.")
-        time.sleep(1.2)
+    # Try Chartink next
+    print(f"☕️Fallback to Chartink for {symbol}")
+    success = fetch_chartink(symbol)
+    if success:
+        print(f"✅{symbol} inserted into DB from Chartink.")
+        return True
 
-if __name__ == "__main__":
-    fetch_and_cache_all()
+    # Try BSE last
+    print(f"☕️Fallback to BSE for {symbol}")
+    success = fetch_bse(symbol)
+    if success:
+        print(f"✅{symbol} inserted into DB from BSE.")
+        return True
+
+    print(f"❌Failed to fetch {symbol} from all sources")
+    return False
+
+
+for i, symbol in enumerate(STOCKS):
+    print(f"\n[{i+1}/{len(STOCKS)}] Processing: {symbol}")
+    try:
+        if fetch_with_fallbacks(symbol):
+            success_count += 1
+        else:
+            failure_count += 1
+    except Exception as e:
+        print(f"Exception during processing {symbol}: {e}")
+        failure_count += 1
+
+print("\nFetch and cache completed.")
+print(f"✅ Total Success: {success_count}")
+print(f"❌ Total Failed: {failure_count}")
