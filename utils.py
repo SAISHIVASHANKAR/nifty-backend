@@ -1,18 +1,44 @@
 # utils.py
 
 import os
+import sqlite3
 import pandas as pd
 
+CACHE_DIR = "/mnt/yf_cache"
+DB_PATH = "nifty_stocks.db"
+
 def get_cached_df(symbol):
-    path = f"/mnt/yf_cache/{symbol}.csv"
+    """
+    Loads the cached CSV for a given stock symbol from /mnt/yf_cache.
+    Returns a pandas DataFrame with a parsed 'Date' column.
+    """
+    path = os.path.join(CACHE_DIR, f"{symbol}.csv")
     if not os.path.exists(path):
-        raise FileNotFoundError(f"No cache for {symbol}")
+        raise FileNotFoundError(f"No cache file for {symbol}")
+    
     df = pd.read_csv(path)
+    df['Date'] = pd.to_datetime(df['Date'])
+    df.set_index('Date', inplace=True)
+    return df
 
-    # Convert all price/volume columns to numeric in case of bad formatting
-    for col in ["Open", "High", "Low", "Close", "Volume"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+def load_price_data(symbol):
+    """
+    Loads historical OHLCV data for a given stock symbol from the SQLite database.
+    Returns a pandas DataFrame indexed by date.
+    """
+    if not os.path.exists(DB_PATH):
+        raise FileNotFoundError("Database not found")
 
-    # Drop any rows with NaN values to avoid processing errors
-    df.dropna(inplace=True)
+    conn = sqlite3.connect(DB_PATH)
+    query = f"""
+        SELECT date, open, high, low, close, volume
+        FROM price_data
+        WHERE symbol = ?
+        ORDER BY date ASC
+    """
+    df = pd.read_sql_query(query, conn, params=(symbol,))
+    conn.close()
+
+    df['date'] = pd.to_datetime(df['date'])
+    df.set_index('date', inplace=True)
     return df
