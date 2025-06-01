@@ -2,7 +2,6 @@
 
 import yfinance as yf
 import pandas as pd
-import sqlite3
 from datetime import datetime, timedelta
 from utils import insert_into_prices_table
 
