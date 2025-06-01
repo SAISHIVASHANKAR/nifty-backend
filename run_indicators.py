@@ -1,61 +1,34 @@
-import sqlite3
+# run_indicators.py
+
 from indicators import compute_all_indicators
-from stocks import STOCKS
 from utils import get_cached_df
+from stocks import STOCKS
 
-# Connect to SQLite database
-conn = sqlite3.connect("indicator_signals.db")
-cursor = conn.cursor()
-
-# Ensure table exists with all required columns
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS signals (
-    symbol TEXT,
-    trend INTEGER,
-    momentum INTEGER,
-    volume INTEGER,
-    volatility INTEGER,
-    support_resistance INTEGER,
-    count INTEGER
-)
-""")
-conn.commit()
+import sqlite3
 
 print("📊 Running indicators and saving signals to indicator_signals.db")
 
-# Loop through all stocks
+# Connect to SQLite DB
+conn = sqlite3.connect("indicator_signals.db")
+cursor = conn.cursor()
+
+# Iterate over all stock symbols
 for symbol in STOCKS:
     print(f"📈 Processing: {symbol}")
+
+    # Get cleaned DataFrame from cache
+    df = get_cached_df(symbol)
+    if df is None or df.empty:
+        print(f"⚠️ Skipping {symbol}: No usable data")
+        continue
+
+    # Try computing and inserting signals
     try:
-        df = get_cached_df(symbol)
-
-        if df is None or df.empty:
-            print(f"⚠️ Skipping {symbol}: No usable data")
-            continue  # <<--- INSIDE LOOP
-
-        signals = compute_all_indicators(df)
-        if not signals:
-            print(f"⚠️ Skipping {symbol}: No signals generated")
-            continue  # <<--- INSIDE LOOP
-
-        total_score = sum(signals.values())
-
-        cursor.execute("""
-        INSERT INTO signals (symbol, trend, momentum, volume, volatility, support_resistance, count)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            symbol,
-            signals.get("trend", 0),
-            signals.get("momentum", 0),
-            signals.get("volume", 0),
-            signals.get("volatility", 0),
-            signals.get("support_resistance", 0),
-            total_score
-        ))
+        compute_all_indicators(symbol, df, cursor)
         conn.commit()
-        print(f"✅ {symbol} inserted: Total Score = {total_score}")
-
+        print(f"✅ {symbol} inserted.\n")
     except Exception as e:
-        print(f"❌ Failed to insert signal for {symbol}: {e}")
+        print(f"❌Failed to insert signal for {symbol}: {e}\n")
 
+# Close DB connection
 conn.close()
