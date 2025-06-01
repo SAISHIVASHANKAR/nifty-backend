@@ -46,13 +46,25 @@ def insert_indicator_signal(conn, symbol, trend, momentum, volume, volatility, s
 import pandas as pd
 
 def get_cached_df(symbol):
-    """
-    Load EOD price data from CSV in /mnt/yf_cache for the given symbol.
-    Returns a pandas DataFrame.
-    """
-    path = f"/mnt/yf_cache/{symbol}.csv"
-    df = pd.read_csv(path, skiprows=1)  # Assuming row 0 is header
-    df.columns = ["Date", "Close", "High", "Low", "Open", "Volume"]
-    df["Date"] = pd.to_datetime(df["Date"])
-    df = df.sort_values("Date").reset_index(drop=True)
-    return df
+    try:
+        path = f"/mnt/yf_cache/{symbol}.csv"
+        df = pd.read_csv(path, skiprows=1)
+
+        # Rename based on available columns
+        df.columns = [col.strip().split('.')[0] for col in df.columns]
+        cols = df.columns.tolist()
+
+        # Reorder to our required order
+        expected = ["Date", "Open", "High", "Low", "Close", "Volume"]
+        if not all(col in cols for col in expected):
+            print(f"⚠️ Skipping {symbol}: Missing required columns")
+            return None
+
+        df = df[expected]
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.dropna().sort_values("Date").reset_index(drop=True)
+
+        return df
+    except Exception as e:
+        print(f"❌ Failed to load CSV for {symbol}: {e}")
+        return None
