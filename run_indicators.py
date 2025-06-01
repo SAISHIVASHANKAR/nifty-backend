@@ -1,44 +1,65 @@
-# run_indicators.py
-
+import sqlite3
+from indicators import compute_all_indicators
 from stocks import STOCKS
 from utils import get_cached_df
-from indicators import compute_all_indicators
-import sqlite3
 
-# Connect to SQLite database
+# Connect to SQLite DB
 conn = sqlite3.connect("indicator_signals.db")
 cursor = conn.cursor()
 
-# Create the table if it doesn't exist
+# Create table if not exists
 cursor.execute("""
-    CREATE TABLE IF NOT EXISTS signals (
-        symbol TEXT PRIMARY KEY,
-        trend INTEGER,
-        momentum INTEGER,
-        volume INTEGER,
-        volatility INTEGER,
-        support_resistance INTEGER,
-        count INTEGER
-    )
+CREATE TABLE IF NOT EXISTS signals (
+    symbol TEXT,
+    trend INTEGER,
+    momentum INTEGER,
+    volume INTEGER,
+    volatility INTEGER,
+    support_resistance INTEGER,
+    count INTEGER
+)
 """)
+conn.commit()
 
-print("📊 Running technical indicators for all stocks...\n")
+print("📊 Running indicators and saving signals to indicator_signals.db")
 
+# Loop through all stocks
 for symbol in STOCKS.keys():
     print(f"📈 Processing: {symbol}")
     try:
         df = get_cached_df(symbol)
         if df is None or df.empty:
-            print(f"⚠️ Skipped {symbol}: No data or empty DataFrame")
+            print(f"⚠️ Skipping {symbol}: No usable data")
             continue
-        compute_all_indicators(symbol, df, cursor)
+
+        # Compute indicators
+        signals = compute_all_indicators(df)
+
+        if not signals:
+            print(f"⚠️ No indicators returned for {symbol}")
+            continue
+
+        total_score = sum(signals.values())
+
+        try:
+            cursor.execute("""
+                INSERT INTO signals (symbol, trend, momentum, volume, volatility, support_resistance, count)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                symbol,
+                signals.get("trend", 0),
+                signals.get("momentum", 0),
+                signals.get("volume", 0),
+                signals.get("volatility", 0),
+                signals.get("support_resistance", 0),
+                total_score
+            ))
+            conn.commit()
+            print(f"✅ {symbol} inserted: Total Score = {total_score}")
+        except Exception as e:
+            print(f"❌ Failed to insert signal for {symbol}: {e}")
+
     except Exception as e:
-        print(f"❌ Failed to process {symbol}: {e}")
+        print(f"❌ Error computing indicators for {symbol}: {e}")
 
-conn.commit()
 conn.close()
-print("\n✅ Done. All available signals inserted into indicator_signals.db.")
-
-if df is None or df.empty:
-    print(f"⚠️ Skipping {symbol}: No usable data")
-    continue
