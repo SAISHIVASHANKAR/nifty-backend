@@ -1,33 +1,14 @@
 # run_indicators.py
-
-from indicators import compute_all_indicators
-from utils import get_cached_df
 from stocks import STOCKS
+from utils import get_cached_df
+from indicators import compute_all_indicators
 
-import sqlite3
+print("📊Running indicators and saving signals to indicator_signals.db")
 
-print("📊 Running indicators and saving signals to indicator_signals.db")
-
-conn = sqlite3.connect("indicator_signals.db")
-cursor = conn.cursor()
-
-total = len(STOCKS)
-count = 0
-
-for symbol in STOCKS:
-    count += 1
-    print(f"\n📈 [{count}/{total}] Processing: {symbol}")
-
-    df = get_cached_df(symbol)
-    if df is None or df.empty:
-        print(f"⚠️ Skipping {symbol}: No usable DB data")
-        continue
-
+for idx, symbol in enumerate(STOCKS.keys()):
+    print(f"\n📈[{idx+1}/{len(STOCKS)}] Processing: {symbol}")
     try:
-        compute_all_indicators(symbol, df, cursor)
-        conn.commit()
-        print(f"✅ {symbol} inserted.")
+        df = get_cached_df(symbol)
+        compute_all_indicators(symbol, df)
     except Exception as e:
-        print(f"❌ Failed for {symbol}: {e}")
-
-conn.close()
+        print(f"❌Error processing {symbol}: {e}")
