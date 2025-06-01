@@ -5,56 +5,58 @@ from fetch_from_yf import fetch_from_yf
 from fallback_eod import fetch_eodhistorical
 from fallback_chartink import fetch_chartink
 from fallback_bse import fetch_bse
-
-print("\nStarting full fetch and cache process\n")
-
-success_count = 0
-failure_count = 0
+from utils import symbol_has_data
 
 def fetch_with_fallbacks(symbol):
-    # Try Yahoo Finance first
-    print(f"☕️Fetching {symbol} from Yahoo Finance: 8y range")
+    if symbol_has_data(symbol):
+        print(f"⏭️ Skipping {symbol}: already present in DB.")
+        return True
+
+    # 1. Try Yahoo Finance
     success = fetch_from_yf(symbol)
     if success:
-        print(f"✅{symbol} inserted into DB from Yahoo Finance.")
+        print(f"✅ {symbol} inserted into DB from Yahoo Finance.")
         return True
 
-    # Try EOD Historical next
-    print(f"☕️Fallback to EOD Historical for {symbol}")
+    # 2. Try EODHistorical
+    print(f"📦 Fallback to EOD Historical for {symbol}")
     success = fetch_eodhistorical(symbol)
     if success:
-        print(f"✅{symbol} inserted into DB from EOD Historical.")
+        print(f"✅ {symbol} inserted into DB from EOD Historical.")
         return True
 
-    # Try Chartink next
-    print(f"☕️Fallback to Chartink for {symbol}")
+    # 3. Try Chartink
+    print(f"📦 Fallback to Chartink for {symbol}")
     success = fetch_chartink(symbol)
     if success:
-        print(f"✅{symbol} inserted into DB from Chartink.")
+        print(f"✅ {symbol} inserted into DB from Chartink.")
         return True
 
-    # Try BSE last
-    print(f"☕️Fallback to BSE for {symbol}")
+    # 4. Try BSE
+    print(f"📦 Fallback to BSE for {symbol}")
     success = fetch_bse(symbol)
     if success:
-        print(f"✅{symbol} inserted into DB from BSE.")
+        print(f"✅ {symbol} inserted into DB from BSE.")
         return True
 
-    print(f"❌Failed to fetch {symbol} from all sources")
+    print(f"❌ Failed to fetch {symbol} from all sources.")
     return False
 
+def main():
+    success_count = 0
+    failure_count = 0
+    total = len(STOCKS)
 
-for i, symbol in enumerate(STOCKS):
-    print(f"\n[{i+1}/{len(STOCKS)}] Processing: {symbol}")
-    try:
+    for i, symbol in enumerate(STOCKS, 1):
+        print(f"[{i}/{total}] Processing: {symbol}")
         if fetch_with_fallbacks(symbol):
             success_count += 1
         else:
             failure_count += 1
-    except Exception as e:
-        print(f"Exception during processing {symbol}: {e}")
-        failure_count += 1
 
-print("\nFetch and cache completed.")
-print(f"✅ Total Success: {success_count}")
-print(f"❌ Total Failed: {failure_count}")
+    print("\nFetch and cache completed.")
+    print(f"✅ Total Success: {success_count}")
+    print(f"❌ Total Failed: {failure_count}")
+
+if __name__ == "__main__":
+    main()
