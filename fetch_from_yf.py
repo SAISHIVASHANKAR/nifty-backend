@@ -6,30 +6,30 @@ import sqlite3
 from datetime import datetime, timedelta
 from utils import insert_into_prices_table
 
-def fetch_yf(symbol: str, years: int, cursor=None):
+def fetch_yf(symbol: str, years: int, cursor=None) -> bool:
     try:
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=years * 365)
+        start_date = end_date - timedelta(days=365 * years)
 
-        data = yf.download(
+        df = yf.download(
             f"{symbol}.NS",
-            start=start_date.strftime('%Y-%m-%d'),
-            end=end_date.strftime('%Y-%m-%d'),
+            start=start_date.strftime("%Y-%m-%d"),
+            end=end_date.strftime("%Y-%m-%d"),
             interval="1d",
             progress=False
         )
 
-        if data.empty:
-            print(f"⚠️ No data returned from Yahoo for {symbol} ({years}y)")
+        if df.empty:
+            print(f"⚠️ No data for {symbol} ({years}y)")
             return False
 
-        data.reset_index(inplace=True)
+        df.reset_index(inplace=True)
 
         records = []
-        for _, row in data.iterrows():
+        for _, row in df.iterrows():
             records.append((
                 symbol,
-                row['Date'].strftime('%Y-%m-%d'),
+                row['Date'].strftime("%Y-%m-%d"),
                 float(row['Open']) if not pd.isna(row['Open']) else None,
                 float(row['High']) if not pd.isna(row['High']) else None,
                 float(row['Low']) if not pd.isna(row['Low']) else None,
@@ -42,5 +42,5 @@ def fetch_yf(symbol: str, years: int, cursor=None):
         return True
 
     except Exception as e:
-        print(f"❌ Error fetching {symbol} for {years}y: {e}")
+        print(f"❌ Error fetching {symbol}: {e}")
         return False
