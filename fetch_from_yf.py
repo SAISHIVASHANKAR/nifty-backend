@@ -2,72 +2,59 @@
 import yfinance as yf
 import sqlite3
 import pandas as pd
-from datetime import datetime
 from stocks import STOCKS
+from datetime import datetime
+import time
 
 DB_PATH = "nifty_stocks.db"
 
-def insert_into_prices(symbol, df):
-    """Insert price data into SQLite 'prices' table"""
+def insert_to_db(symbol, df):
     conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    # Prepare rows to insert
-    rows = [
-        (
-            symbol,
-            row["Date"],
-            row["Open"],
-            row["High"],
-            row["Low"],
-            row["Close"],
-            row["Volume"]
-        )
-        for _, row in df.iterrows()
-    ]
-
-    # Insert
-    cursor.executemany(
-        "INSERT INTO prices (Symbol, Date, Open, High, Low, Close, Volume) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        rows
-    )
-
-    conn.commit()
+    df["Symbol"] = symbol
+    df.to_sql("prices", conn, if_exists="append", index=False)
     conn.close()
 
-def fetch_and_store_yf(symbol):
-    for years in range(8, 0, -1):  # Try 8y to 1y fallback
-        try:
-            print(f"📦 Fetching {symbol} for {years}y")
-            data = yf.download(f"{symbol}.NS", period=f"{years}y", interval="1d", progress=False)
-
-            if data.empty:
-                continue
-
-            df = data.reset_index()
-            df = df[["Date", "Open", "High", "Low", "Close", "Volume"]]
-            df.dropna(inplace=True)
-
-            if df.empty:
-                continue
-
-            # Format Date as string for SQLite
-            df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
-            insert_into_prices(symbol, df)
-            print(f"✅ {symbol} inserted: {len(df)} rows")
-            return True
-
-        except Exception as e:
-            print(f"⚠️ Error fetching {symbol} for {years}y: {e}")
-    return False
+def fetch_yf(symbol, years):
+    try:
+        print(f"📦Fetching {symbol} for {years}y")
+        period = f"{years}y"
+        df = yf.download(f"{symbol}.NS", period=period)
+        if df.empty:
+            return None
+        df = df.reset_index()
+        df = df[["Date", "Open", "High", "Low", "Close", "Volume"]]
+        return df
+    except Exception as e:
+        print(f"⚠️Error fetching {symbol} for {years}y: {e}")
+        return None
 
 def main():
-    total = len(STOCKS)
-    for i, symbol in enumerate(STOCKS, 1):
-        print(f"\n[{i}/{total}] Processing: {symbol}")
-        success = fetch_and_store_yf(symbol)
-        if not success:
-            print(f"❌ Skipped {symbol}: No usable data")
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute('''CREATE TABLE IF NOT EXISTS prices (
+        Symbol TEXT,
+        Date TEXT,
+        Open REAL,
+        High REAL,
+        Low REAL,
+        Close REAL,
+        Volume REAL
+    )''')
+    conn.close()
+
+    for idx, symbol in enumerate(STOCKS.keys()):
+        print(f"[{idx+1}/{len(STOCKS)}] Processing: {symbol}")
+        for y in range(8, 0, -1):
+            df = fetch_yf(symbol, y)
+            if df is not None and not df.empty:
+                try:
+                    insert_to_db(symbol, df)
+                    print(f"✅Inserted {symbol} ({len(df)} rows)")
+                except Exception as e:
+                    print(f"❌Insert error for {symbol}: {e}")
+                break
+            time.sleep(1)
+        else:
+            print(f"❌Skipped {symbol}: No usable data")
 
 if __name__ == "__main__":
     main()
