@@ -1,68 +1,42 @@
+# utils.py
+
 import sqlite3
 import pandas as pd
-from datetime import datetime
 
-DB_PATH = "nifty_stocks.db"
-
-def get_connection():
-    return sqlite3.connect(DB_PATH)
-
-def get_cached_df(symbol):
-    conn = get_connection()
-    query = f"""
-        SELECT Date, Close, High, Low, Open, Volume
-        FROM prices
-        WHERE Symbol = ?
-        ORDER BY Date ASC
-    """
-    try:
-        df = pd.read_sql(query, conn, params=(symbol,), parse_dates=["Date"])
-        return df
-    except Exception as e:
-        print(f"⚠️ Failed to load cached data for {symbol}: {e}")
-        return pd.DataFrame()
+def get_db_connection():
+    return sqlite3.connect("nifty_stocks.db")
 
 def insert_into_prices_table(df, symbol):
     try:
-        if df.empty:
-            print(f"⚠️ Empty DataFrame, skipping insert for {symbol}")
-            return False
-
-        # Ensure proper formatting
+        conn = get_db_connection()
         df = df.copy()
-        df.reset_index(inplace=True)
-        if "Date" not in df.columns:
-            df["Date"] = df["index"]
-        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
-        df["Symbol"] = symbol
+        df["symbol"] = symbol
 
-        required_cols = ["Symbol", "Date", "Open", "High", "Low", "Close", "Volume"]
-        df = df[required_cols]
-        for col in required_cols:
-            if col not in df.columns:
-                raise ValueError(f"Missing required column: {col}")
+        df = df.rename(columns={
+            "Date": "date",
+            "Open": "open",
+            "High": "high",
+            "Low": "low",
+            "Close": "close",
+            "Volume": "volume"
+        })
 
-        df = df[required_cols]
-        df.dropna(inplace=True)
-
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS prices (
-                Symbol TEXT,
-                Date TEXT,
-                Open REAL,
-                High REAL,
-                Low REAL,
-                Close REAL,
-                Volume REAL
-            )
-        """)
-
+        df = df[["date", "open", "high", "low", "close", "volume", "symbol"]]
         df.to_sql("prices", conn, if_exists="append", index=False)
-        conn.commit()
+        conn.close()
         return True
+
     except Exception as e:
-        print(f"❌ DB insert error for {symbol}: {e}")
+        print(f"DB insert error for {symbol}: {e}")
         return False
+
+def get_cached_df(symbol):
+    try:
+        conn = get_db_connection()
+        query = f"SELECT * FROM prices WHERE symbol = ? ORDER BY date"
+        df = pd.read_sql_query(query, conn, params=(symbol,))
+        conn.close()
+        return df
+    except Exception as e:
+        print(f"Error loading from DB for {symbol}: {e}")
+        return pd.DataFrame()
