@@ -1,36 +1,44 @@
 # run_indicators.py
 
+import sqlite3
+import pandas as pd
 from indicators import compute_all_indicators
-from utils import get_cached_df, get_db_connection
-
 from stocks import STOCKS
 
-print("📊 Running indicators and saving signals to DB...\n")
+def run():
+    conn = sqlite3.connect("nifty_stocks.db")
+    cursor = conn.cursor()
 
-total = len(STOCKS)
-success = 0
-failure = 0
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS indicator_signals (
+            symbol TEXT PRIMARY KEY,
+            trend INTEGER,
+            momentum INTEGER,
+            volume INTEGER,
+            volatility INTEGER,
+            support_resistance INTEGER
+        )
+    """)
 
-for i, symbol in enumerate(STOCKS, 1):
-    print(f"[{i}/{total}] Processing: {symbol}")
-    df = get_cached_df(symbol)
+    for idx, symbol in enumerate(STOCKS.keys(), 1):
+        try:
+            print(f"[{idx}/{len(STOCKS)}] Processing: {symbol}")
+            df = pd.read_sql_query(
+                "SELECT * FROM prices WHERE symbol = ? ORDER BY date",
+                conn, params=(symbol,)
+            )
+            if df.empty:
+                print(f"⚠️ Skipping {symbol}: No usable DB data")
+                continue
 
-    if df.empty:
-        print(f"⚠️ Skipping {symbol}: No usable DB data")
-        failure += 1
-        continue
+            compute_all_indicators(df, cursor, symbol)
 
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        compute_all_indicators(df, symbol, cursor)
-        conn.commit()
-        conn.close()
-        success += 1
-    except Exception as e:
-        print(f"❌ Error processing {symbol}: {e}")
-        failure += 1
+        except Exception as e:
+            print(f"❌ Error processing {symbol}: {e}")
 
-print("✅ All signals saved to DB.")
-print(f"✔️ Total Success: {success}")
-print(f"❌ Total Failed: {failure}")
+    conn.commit()
+    conn.close()
+    print("✅ All signals saved to DB.")
+
+if __name__ == "__main__":
+    run()
