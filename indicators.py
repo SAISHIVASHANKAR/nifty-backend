@@ -1,101 +1,95 @@
 # indicators.py
 
-import pandas as pd
-import talib
+import pandas_ta as ta
+from utils import insert_indicator_signal
+from datetime import datetime
 
 def compute_all_indicators(df, cursor, symbol):
     try:
         df = df.copy()
         df["date"] = pd.to_datetime(df["date"])
-        df = df.sort_values("date")
+        df.set_index("date", inplace=True)
+        df.sort_index(inplace=True)
 
-        close = df["close"].values
-        high = df["high"].values
-        low = df["low"].values
-        volume = df["volume"].values
+        scores = {
+            "trend": 0,
+            "momentum": 0,
+            "volume": 0,
+            "volatility": 0,
+            "support_resistance": 0
+        }
 
-        # Indicator Scores
-        trend_score = 0
-        momentum_score = 0
-        volume_score = 0
-        volatility_score = 0
-        support_resistance_score = 0
+        # --- Trend Indicators ---
+        df["ADX"] = ta.adx(df["high"], df["low"], df["close"], length=15)["ADX_15"]
+        if df["ADX"].iloc[-1] > 25:
+            scores["trend"] += 1
+        elif df["ADX"].iloc[-1] < 20:
+            scores["trend"] -= 1
 
-        # ----- Trend -----
-        adx = talib.ADX(high, low, close, timeperiod=15)
-        if adx.iloc[-1] > 25:
-            trend_score += 1
-        elif adx.iloc[-1] < 20:
-            trend_score -= 1
-
-        vwap = (df["close"] * df["volume"]).cumsum() / df["volume"].cumsum()
-        if df["close"].iloc[-1] > vwap.iloc[-1]:
-            trend_score += 1
+        df["VWAP"] = ta.vwap(df["high"], df["low"], df["close"], df["volume"])
+        if df["close"].iloc[-1] > df["VWAP"].iloc[-1]:
+            scores["trend"] += 1
         else:
-            trend_score -= 1
+            scores["trend"] -= 1
 
-        # ----- Momentum -----
-        macd, signal, _ = talib.MACD(close, fastperiod=18, slowperiod=36, signalperiod=9)
-        if macd.iloc[-1] > signal.iloc[-1]:
-            momentum_score += 1
+        # --- Momentum Indicators ---
+        macd = ta.macd(df["close"], fast=18, slow=36, signal=9)
+        if macd["MACD_18_36_9"].iloc[-1] > macd["MACDs_18_36_9"].iloc[-1]:
+            scores["momentum"] += 1
         else:
-            momentum_score -= 1
+            scores["momentum"] -= 1
 
-        rsi = talib.RSI(close, timeperiod=15)
-        if rsi.iloc[-1] < 30:
-            momentum_score += 1
-        elif rsi.iloc[-1] > 70:
-            momentum_score -= 1
+        df["RSI"] = ta.rsi(df["close"], length=15)
+        if df["RSI"].iloc[-1] < 30:
+            scores["momentum"] += 1
+        elif df["RSI"].iloc[-1] > 70:
+            scores["momentum"] -= 1
 
-        # ----- Volume -----
-        obv = talib.OBV(close, volume)
+        # --- Volume Indicators ---
+        obv = ta.obv(df["close"], df["volume"])
         if obv.iloc[-1] > obv.iloc[-2]:
-            volume_score += 1
+            scores["volume"] += 1
         else:
-            volume_score -= 1
+            scores["volume"] -= 1
 
-        chaikin = talib.ADOSC(high, low, close, volume, fastperiod=3, slowperiod=10)
-        if chaikin.iloc[-1] > 0:
-            volume_score += 1
+        cho = ta.chaikin(df["high"], df["low"], df["close"], df["volume"], length=15)
+        if cho.iloc[-1] > cho.iloc[-2]:
+            scores["volume"] += 1
         else:
-            volume_score -= 1
+            scores["volume"] -= 1
 
-        # ----- Volatility -----
-        atr = talib.ATR(high, low, close, timeperiod=15)
-        if atr.iloc[-1] > atr.iloc[-20:-1].mean():
-            volatility_score += 1
+        # --- Volatility Indicators ---
+        bb = ta.bbands(df["close"], length=30, std=2)
+        if df["close"].iloc[-1] < bb["BBL_30_2.0"].iloc[-1]:
+            scores["volatility"] += 1
+        elif df["close"].iloc[-1] > bb["BBU_30_2.0"].iloc[-1]:
+            scores["volatility"] -= 1
+
+        df["ATR"] = ta.atr(df["high"], df["low"], df["close"], length=15)
+        if df["ATR"].iloc[-1] > df["ATR"].iloc[-2]:
+            scores["volatility"] += 1
         else:
-            volatility_score -= 1
+            scores["volatility"] -= 1
 
-        upper, middle, lower = talib.BBANDS(close, timeperiod=30, nbdevup=2, nbdevdn=2)
-        if close[-1] < lower[-1]:
-            volatility_score += 1
-        elif close[-1] > upper[-1]:
-            volatility_score -= 1
+        # --- Support/Resistance Indicators ---
+        # Simulate Fibonacci logic with rolling high/low
+        recent_high = df["high"].rolling(window=21).max().iloc[-1]
+        recent_low = df["low"].rolling(window=21).min().iloc[-1]
+        fib_618 = recent_low + 0.618 * (recent_high - recent_low)
 
-        # ----- Support/Resistance -----
-        close_today = close[-1]
-        close_yesterday = close[-2]
-        midpoint = (high[-2] + low[-2]) / 2
-        if close_today > midpoint and close_today > close_yesterday:
-            support_resistance_score += 1
-        elif close_today < midpoint and close_today < close_yesterday:
-            support_resistance_score -= 1
-
-        # Gann Fan (Stub logic)
-        if close_today > close.mean():
-            support_resistance_score += 1
+        if df["close"].iloc[-1] < fib_618:
+            scores["support_resistance"] += 1
         else:
-            support_resistance_score -= 1
+            scores["support_resistance"] -= 1
 
-        cursor.execute("""
-            INSERT INTO indicator_signals
-            (symbol, trend, momentum, volume, volatility, support_resistance)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (symbol, trend_score, momentum_score, volume_score, volatility_score, support_resistance_score))
+        # Gann Fan logic simulated with close vs avg HL
+        gann_level = (df["high"] + df["low"]) / 2
+        if df["close"].iloc[-1] > gann_level.iloc[-1]:
+            scores["support_resistance"] += 1
+        else:
+            scores["support_resistance"] -= 1
 
-        return True
+        insert_indicator_signal(cursor, symbol, scores)
 
     except Exception as e:
-        print(f"❌ Error computing indicators for {symbol}: {e}")
-        return False
+        print(f"❌Error computing indicators for {symbol}: {e}")
