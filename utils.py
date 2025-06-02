@@ -41,16 +41,6 @@ def get_cached_df(symbol):
         print(f"Error loading from DB for {symbol}: {e}")
         return pd.DataFrame()
 
-def insert_indicator_signal(cursor, symbol, trend, momentum, volume, volatility, support_resistance):
-    try:
-        cursor.execute("""
-            INSERT INTO indicator_signals 
-            (symbol, trend, momentum, volume, volatility, support_resistance)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (symbol, trend, momentum, volume, volatility, support_resistance))
-    except Exception as e:
-        print(f"Error inserting signals for {symbol}: {e}")
-
 def symbol_has_data(symbol):
     try:
         conn = get_db_connection()
@@ -62,7 +52,6 @@ def symbol_has_data(symbol):
     except Exception as e:
         print(f"DB check failed for {symbol}: {e}")
         return False
-# utils.py
 
 def insert_indicator_signal(cursor, symbol, trend, momentum, volume, volatility, support_resistance):
     try:
