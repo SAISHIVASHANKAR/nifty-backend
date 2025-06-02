@@ -6,18 +6,36 @@ from indicators import compute_all_indicators, generate_scores
 
 def main():
     for symbol in STOCKS:
+        print(f"\n📈 Processing {symbol}")
         try:
             df = get_cached_df(symbol)
-            if df.empty or len(df) < 30:
-                print(f"⚠️ Skipping {symbol}, insufficient data.")
+            if df.empty:
+                print(f"⚠️ Skipping {symbol} - No data found.")
+                continue
+            if len(df) < 30:
+                print(f"⚠️ Skipping {symbol} - Not enough data ({len(df)} rows).")
                 continue
 
-            df = compute_all_indicators(df)
-            scores = generate_scores(df)
-            insert_signal(symbol, scores)
+            try:
+                df = compute_all_indicators(df)
+            except Exception as e:
+                print(f"❌ compute_all_indicators() failed for {symbol}: {e}")
+                continue
+
+            try:
+                scores = generate_scores(df)
+            except Exception as e:
+                print(f"❌ generate_scores() failed for {symbol}: {e}")
+                continue
+
+            try:
+                insert_signal(symbol, scores)
+            except Exception as e:
+                print(f"❌ insert_signal() failed for {symbol}: {e}")
+                continue
 
         except Exception as e:
-            print(f"❌ Error in processing {symbol}: {e}")
+            print(f"❌ Outer error in processing {symbol}: {e}")
 
 if __name__ == "__main__":
     main()
