@@ -1,14 +1,26 @@
 # run_indicators.py
+
+import sqlite3
+from indicators import compute_all_indicators
 from stocks import STOCKS
 from utils import get_cached_df
-from indicators import compute_all_indicators
 
-print("📊Running indicators and saving signals to indicator_signals.db")
+def run_all():
+    conn = sqlite3.connect("nifty_stocks.db")
+    cursor = conn.cursor()
 
-for idx, symbol in enumerate(STOCKS.keys()):
-    print(f"\n📈[{idx+1}/{len(STOCKS)}] Processing: {symbol}")
-    try:
+    print("🔍 Running indicator evaluations...")
+    for symbol in STOCKS.keys():
         df = get_cached_df(symbol)
-        compute_all_indicators(symbol, df)
-    except Exception as e:
-        print(f"❌Error processing {symbol}: {e}")
+        if df.empty:
+            print(f"⚠️ No data found for {symbol}")
+            continue
+
+        compute_all_indicators(symbol, df, cursor)
+
+    conn.commit()
+    conn.close()
+    print("✅ All indicators updated.")
+
+if __name__ == "__main__":
+    run_all()
