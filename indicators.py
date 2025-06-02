@@ -1,90 +1,101 @@
 # indicators.py
 
 import pandas as pd
-import pandas_ta as ta
-from utils import insert_indicator_signal
+import talib
 
 def compute_all_indicators(df, cursor, symbol):
     try:
         df = df.copy()
         df["date"] = pd.to_datetime(df["date"])
-        df.set_index("date", inplace=True)
-        score = 0
+        df = df.sort_values("date")
 
-        # Momentum
-        macd = ta.macd(df["close"], fast=18, slow=36, signal=9)
-        if macd is not None and not macd.isnull().values.any():
-            if macd["MACD_18_36_9"].iloc[-1] > macd["MACDs_18_36_9"].iloc[-1]:
-                score += 1
-            else:
-                score -= 1
+        close = df["close"].values
+        high = df["high"].values
+        low = df["low"].values
+        volume = df["volume"].values
 
-        rsi = ta.rsi(df["close"], length=15)
-        if rsi is not None and not rsi.isnull().values.any():
-            if rsi.iloc[-1] > 50:
-                score += 1
-            else:
-                score -= 1
+        # Indicator Scores
+        trend_score = 0
+        momentum_score = 0
+        volume_score = 0
+        volatility_score = 0
+        support_resistance_score = 0
 
-        # Trend
-        adx = ta.adx(df["high"], df["low"], df["close"], length=15)
-        if adx is not None and not adx.isnull().values.any():
-            if adx["ADX_15"].iloc[-1] > 25:
-                score += 1
-            else:
-                score -= 1
+        # ----- Trend -----
+        adx = talib.ADX(high, low, close, timeperiod=15)
+        if adx.iloc[-1] > 25:
+            trend_score += 1
+        elif adx.iloc[-1] < 20:
+            trend_score -= 1
 
-        vwap = ta.vwap(df["high"], df["low"], df["close"], df["volume"], anchor="D")
-        if vwap is not None and not vwap.isnull().values.any():
-            if df["close"].iloc[-1] > vwap.iloc[-1]:
-                score += 1
-            else:
-                score -= 1
-
-        # Volume
-        obv = ta.obv(df["close"], df["volume"])
-        if obv is not None and not obv.isnull().values.any():
-            if obv.iloc[-1] > obv.iloc[-2]:
-                score += 1
-            else:
-                score -= 1
-
-        chaikin = ta.adosc(df["high"], df["low"], df["close"], df["volume"], fast=3, slow=10)
-        if chaikin is not None and not chaikin.isnull().values.any():
-            if chaikin.iloc[-1] > 0:
-                score += 1
-            else:
-                score -= 1
-
-        # Volatility
-        atr = ta.atr(df["high"], df["low"], df["close"], length=15)
-        if atr is not None and not atr.isnull().values.any():
-            if atr.iloc[-1] > atr.iloc[-2]:
-                score += 1
-            else:
-                score -= 1
-
-        bbands = ta.bbands(df["close"], length=30, std=2)
-        if bbands is not None and not bbands.isnull().values.any():
-            if df["close"].iloc[-1] > bbands["BBL_30_2.0"].iloc[-1]:
-                score += 1
-            else:
-                score -= 1
-
-        # Support/Resistance
-        fib_support = df["close"].max() * 0.618
-        if df["close"].iloc[-1] > fib_support:
-            score += 1
+        vwap = (df["close"] * df["volume"]).cumsum() / df["volume"].cumsum()
+        if df["close"].iloc[-1] > vwap.iloc[-1]:
+            trend_score += 1
         else:
-            score -= 1
+            trend_score -= 1
 
-        gann_support = df["close"].mean()
-        if df["close"].iloc[-1] > gann_support:
-            score += 1
+        # ----- Momentum -----
+        macd, signal, _ = talib.MACD(close, fastperiod=18, slowperiod=36, signalperiod=9)
+        if macd.iloc[-1] > signal.iloc[-1]:
+            momentum_score += 1
         else:
-            score -= 1
+            momentum_score -= 1
 
-        insert_indicator_signal(symbol, score, cursor)
+        rsi = talib.RSI(close, timeperiod=15)
+        if rsi.iloc[-1] < 30:
+            momentum_score += 1
+        elif rsi.iloc[-1] > 70:
+            momentum_score -= 1
+
+        # ----- Volume -----
+        obv = talib.OBV(close, volume)
+        if obv.iloc[-1] > obv.iloc[-2]:
+            volume_score += 1
+        else:
+            volume_score -= 1
+
+        chaikin = talib.ADOSC(high, low, close, volume, fastperiod=3, slowperiod=10)
+        if chaikin.iloc[-1] > 0:
+            volume_score += 1
+        else:
+            volume_score -= 1
+
+        # ----- Volatility -----
+        atr = talib.ATR(high, low, close, timeperiod=15)
+        if atr.iloc[-1] > atr.iloc[-20:-1].mean():
+            volatility_score += 1
+        else:
+            volatility_score -= 1
+
+        upper, middle, lower = talib.BBANDS(close, timeperiod=30, nbdevup=2, nbdevdn=2)
+        if close[-1] < lower[-1]:
+            volatility_score += 1
+        elif close[-1] > upper[-1]:
+            volatility_score -= 1
+
+        # ----- Support/Resistance -----
+        close_today = close[-1]
+        close_yesterday = close[-2]
+        midpoint = (high[-2] + low[-2]) / 2
+        if close_today > midpoint and close_today > close_yesterday:
+            support_resistance_score += 1
+        elif close_today < midpoint and close_today < close_yesterday:
+            support_resistance_score -= 1
+
+        # Gann Fan (Stub logic)
+        if close_today > close.mean():
+            support_resistance_score += 1
+        else:
+            support_resistance_score -= 1
+
+        cursor.execute("""
+            INSERT INTO indicator_signals
+            (symbol, trend, momentum, volume, volatility, support_resistance)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (symbol, trend_score, momentum_score, volume_score, volatility_score, support_resistance_score))
+
+        return True
 
     except Exception as e:
         print(f"❌ Error computing indicators for {symbol}: {e}")
+        return False
