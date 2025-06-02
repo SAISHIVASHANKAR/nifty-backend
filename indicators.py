@@ -1,5 +1,6 @@
 # indicators.py
 
+import pandas as pd
 import pandas_ta as ta
 from utils import insert_indicator_signal
 from datetime import datetime
