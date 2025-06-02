@@ -62,3 +62,14 @@ def symbol_has_data(symbol):
     except Exception as e:
         print(f"DB check failed for {symbol}: {e}")
         return False
+# utils.py
+
+def insert_indicator_signal(cursor, symbol, trend, momentum, volume, volatility, support_resistance):
+    try:
+        cursor.execute('''
+            INSERT OR REPLACE INTO indicator_signals (
+                symbol, trend, momentum, volume, volatility, support_resistance
+            ) VALUES (?, ?, ?, ?, ?, ?)
+        ''', (symbol, trend, momentum, volume, volatility, support_resistance))
+    except Exception as e:
+        print(f"DB insert error for signal {symbol}: {e}")
