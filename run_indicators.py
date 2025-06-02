@@ -1,11 +1,11 @@
 # run_indicators.py
 import utils
-print(dir(utils))
+print("Functions in utils.py:", dir(utils))
 import sqlite3
 from utils import (
     get_all_symbols,
     get_cached_df,
-    insert_into_indicator_signal,
+    insert_into_indicator_signals,
     get_db_connection
 )
 from indicators import compute_all_indicators
@@ -29,7 +29,7 @@ def run_all():
             try:
                 trend, momentum, volume, volatility, support_resistance = compute_all_indicators(df)
 
-                insert_into_indicator_signal(
+                insert_into_indicator_signals(
                     cursor,
                     symbol,
                     trend,
