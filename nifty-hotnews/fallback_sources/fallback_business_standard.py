@@ -1,18 +1,16 @@
-# fallback_businessstandard.py
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 
 def fetch_news(mode="sod"):
     print("[Business Standard] Fetching in mode:", mode)
-    return [
-        {
-            "timestamp": "2025-06-02 09:00:00",
-            "headline": "Business Standard Top News Headline Example",
-            "source": "Business Standard"
-        }
-    ]
+    
     try:
+        url = "https://www.business-standard.com/latest-news"
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, "html.parser")
 
