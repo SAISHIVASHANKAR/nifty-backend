@@ -1,38 +1,67 @@
-# fetch_and_cache_hotnews.py
 import os
+import json
+import logging
 from datetime import datetime
-from fallback_sources import fallback_moneycontrol, fallback_economictimes, fallback_livemint, fallback_businessline, fallback_investing
 
-MODE = "sod" if datetime.now().hour < 12 else "eod"
-OUTPUT_PATH = f"static/hotnews_{MODE}.json"
+# Fallback imports
+from fallback_sources.fallback_moneycontrol import get_moneycontrol_news
+from fallback_sources.fallback_economictimes import get_economictimes_news
+from fallback_sources.fallback_business_standard import get_business_standard_news
+from fallback_sources.fallback_bloombergquint import get_bloombergquint_news
+from fallback_sources.fallback_bseindia import get_bse_news
 
-def fetch_news():
-    for source_func in [
-        fallback_moneycontrol.fetch_news,
-        fallback_economictimes.fetch_news,
-        fallback_livemint.fetch_news,
-        fallback_businessline.fetch_news,
-        fallback_investing.fetch_news,
-    ]:
+# Setup logging
+LOG_FILE = "logs/hotnews.log"
+CACHE_FILE = "static/news_cache.json"
+
+os.makedirs("logs", exist_ok=True)
+os.makedirs("static", exist_ok=True)
+
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+def fetch_with_fallback():
+    sources = [
+        ("Moneycontrol", get_moneycontrol_news),
+        ("Economic Times", get_economictimes_news),
+        ("Business Standard", get_business_standard_news),
+        ("Bloomberg Quint", get_bloombergquint_news),
+        ("BSE India", get_bse_news)
+    ]
+
+    for name, fetch_func in sources:
         try:
-            print(f"Trying {source_func.__name__} ...")
-            news = source_func(MODE)
-            if news and isinstance(news, list):
-                print(f"✅ Fetched from {source_func.__name__}")
-                return news
+            news_items = fetch_func()
+            if news_items:
+                logging.info(f"✅ News fetched from {name}")
+                return {
+                    "source": name,
+                    "fetched_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "news": news_items
+                }
+            else:
+                logging.warning(f"⚠️ {name} returned empty list")
         except Exception as e:
-            print(f"❌ {source_func.__name__} failed: {e}")
-    return []
+            logging.error(f"❌ Error from {name}: {e}")
+    
+    logging.critical("🔥 All fallback sources failed")
+    return {
+        "source": None,
+        "fetched_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "news": []
+    }
 
-def save_to_json(news):
-    import json
-    with open(OUTPUT_PATH, "w") as f:
-        json.dump(news, f, indent=2, ensure_ascii=False)
-    print(f"📦 Saved {len(news)} articles to {OUTPUT_PATH}")
+def save_cache(data):
+    try:
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        logging.info("✅ News cache saved")
+    except Exception as e:
+        logging.error(f"❌ Failed to save cache: {e}")
 
 if __name__ == "__main__":
-    headlines = fetch_news()
-    if headlines:
-        save_to_json(headlines)
-    else:
-        print("⚠️ No news could be fetched.")
+    result = fetch_with_fallback()
+    save_cache(result)
