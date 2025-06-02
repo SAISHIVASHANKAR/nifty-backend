@@ -1,69 +1,29 @@
-# utils.py
 
 import sqlite3
 import pandas as pd
-
-def get_db_connection():
-    return sqlite3.connect("nifty_stocks.db")
+from config import DB_PATH
 
 def insert_into_prices_table(df, symbol):
-    try:
-        conn = get_db_connection()
-        df = df.copy()
-        df["symbol"] = symbol
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    for index, row in df.iterrows():
+        cursor.execute(
+            """INSERT OR REPLACE INTO prices (symbol, date, open, high, low, close, volume)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (symbol, row['Date'], row['Open'], row['High'], row['Low'], row['Close'], row['Volume'])
+        )
+    conn.commit()
+    conn.close()
 
-        df = df.rename(columns={
-            "Date": "date",
-            "Open": "open",
-            "High": "high",
-            "Low": "low",
-            "Close": "close",
-            "Volume": "volume"
-        })
+def insert_indicator_signal(cursor, symbol, trend, momentum, volume, volatility, support_resistance):
+    cursor.execute(
+        """INSERT OR REPLACE INTO indicator_signals
+           (symbol, trend, momentum, volume, volatility, support_resistance)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (symbol, trend, momentum, volume, volatility, support_resistance)
+    )
 
-        df = df[["date", "open", "high", "low", "close", "volume", "symbol"]]
-        df.to_sql("prices", conn, if_exists="append", index=False)
-        conn.close()
-        return True
-
-    except Exception as e:
-        print(f"DB insert error for {symbol}: {e}")
-        return False
-
-def get_cached_df(symbol):
-    try:
-        conn = get_db_connection()
-        query = "SELECT * FROM prices WHERE symbol = ? ORDER BY date"
-        df = pd.read_sql_query(query, conn, params=(symbol,))
-        conn.close()
-        return df
-    except Exception as e:
-        print(f"Error loading from DB for {symbol}: {e}")
-        return pd.DataFrame()
-
-def insert_signal(symbol, scores):
-    try:
-        conn = get_db_connection()
-        df = pd.DataFrame([{
-            "symbol": symbol,
-            "trend": scores.get("trend", 0),
-            "momentum": scores.get("momentum", 0),
-            "volume": scores.get("volume", 0),
-            "volatility": scores.get("volatility", 0),
-            "support_resistance": scores.get("support_resistance", 0)
-        }])
-        df.to_sql("indicator_signals", conn, if_exists="append", index=False)
-        conn.close()
-        print(f"✅ Signal inserted for {symbol}")
-    except Exception as e:
-        print(f"❌ Failed to insert signal for {symbol}: {e}")
-
-def get_all_symbols():
-    try:
-        conn = get_db_connection()
-        df = pd.read_sql_query("SELECT DISTINCT symbol FROM prices", conn)
-        conn.close()
-        return df["symbol"].tolist()
-    except Exception as e:
-        print(f"Error fetching symbols: {e}")
-        return []
+def get_all_symbols(cursor):
+    cursor.execute("SELECT DISTINCT symbol FROM prices")
+    results = cursor.fetchall()
+    return [row[0] for row in results]
