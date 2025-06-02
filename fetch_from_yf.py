@@ -1,31 +1,35 @@
 # fetch_from_yf.py
 
 import yfinance as yf
-from datetime import datetime, timedelta
-from utils import insert_into_prices_table, symbol_has_data
+import pandas as pd
+from utils import insert_into_prices_table
 
 def fetch_from_yf(symbol):
-    if symbol_has_data(symbol):
-        print(f"⏭️ Skipping {symbol}: already exists in DB.")
-        return True
+    try:
+        print(f"📡 Trying Yahoo Finance for {symbol}")
+        ticker = yf.Ticker(f"{symbol}.NS")
 
-    for years in range(8, 0, -1):
-        try:
-            end = datetime.today()
-            start = end - timedelta(days=365 * years)
-            print(f"🔹 Trying {years} year(s) for {symbol}...")
-            df = yf.download(f"{symbol}.NS", start=start, end=end)
+        for period in ["8y", "7y", "6y", "5y", "4y", "3y", "2y", "1y"]:
+            df = ticker.history(period=period)
+            if df is not None and not df.empty:
+                df = df.reset_index()
+                df.rename(columns={
+                    "Date": "date", "Open": "open", "High": "high",
+                    "Low": "low", "Close": "close", "Volume": "volume"
+                }, inplace=True)
 
-            if df.empty:
-                continue
+                required_cols = ["date", "open", "high", "low", "close", "volume"]
+                if not all(col in df.columns for col in required_cols):
+                    print(f"⚠️ Missing columns in Yahoo data for {symbol}")
+                    continue
 
-            df.reset_index(inplace=True)
-            success = insert_into_prices_table(df, symbol)
-            if success:
-                return True
-        except Exception as e:
-            print(f"Yahoo fetch failed for {symbol} ({years}y): {e}")
-            continue
+                df = df[required_cols]
+                success = insert_into_prices_table(df, symbol)
+                return success
 
-    print(f"❌ Failed to fetch from Yahoo: {symbol}")
-    return False
+        print(f"❌ No valid Yahoo Finance data for {symbol}")
+        return False
+
+    except Exception as e:
+        print(f"💥 Yahoo fetch failed for {symbol}: {e}")
+        return False
