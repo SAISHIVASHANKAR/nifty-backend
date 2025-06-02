@@ -1,8 +1,10 @@
 # run_indicators.py
 
 from stocks import STOCKS
-from utils import get_cached_df, insert_indicator_signal
+from utils import get_cached_df, insert_indicator_signal, get_db_connection
 from indicators import compute_all_indicators
+
+conn, cursor = get_db_connection()
 
 for symbol in STOCKS:
     df = get_cached_df(symbol)
@@ -11,8 +13,10 @@ for symbol in STOCKS:
         continue
 
     try:
-        scores = compute_all_indicators(df)
-        insert_indicator_signal(symbol, scores)
+        compute_all_indicators(df, symbol, cursor)
         print(f"✅ Indicators for {symbol} inserted.")
     except Exception as e:
         print(f"❌ Failed for {symbol}: {e}")
+
+conn.commit()
+conn.close()
