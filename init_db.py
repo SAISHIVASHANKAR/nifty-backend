@@ -9,13 +9,13 @@ def init_prices_table():
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS prices (
-                Date TEXT,
-                Open REAL,
-                High REAL,
-                Low REAL,
-                Close REAL,
-                Volume INTEGER,
-                Symbol TEXT
+                date TEXT,
+                open REAL,
+                high REAL,
+                low REAL,
+                close REAL,
+                volume INTEGER,
+                symbol TEXT
             )
         """)
         conn.commit()
