@@ -1,29 +1,27 @@
 # fallback_chartink.py
 
+from utils import insert_into_prices_table
 import pandas as pd
-from datetime import datetime
-from utils import insert_into_prices_table, symbol_has_data
 
+# Stub implementation (no real Chartink scraping)
 def fetch_chartink(symbol):
-    if symbol_has_data(symbol):
-        print(f"⏭️ Skipping {symbol}: already exists in DB.")
-        return True
-
     try:
-        print(f"🔹 Fetching Chartink fallback data for {symbol} (stub logic)")
-        today = datetime.today()
+        print(f"☕️Fetching Chartink fallback data for {symbol} (stub logic)")
+
+        # Fake fallback data structure with proper column names
         data = {
-            "Date": pd.date_range(end=today, periods=5),
-            "Open": [100] * 5,
-            "High": [105] * 5,
-            "Low": [95] * 5,
-            "Close": [102] * 5,
-            "Volume": [1000] * 5
+            "date": pd.date_range(end=pd.Timestamp.today(), periods=10),
+            "open": [100 + i for i in range(10)],
+            "high": [105 + i for i in range(10)],
+            "low": [95 + i for i in range(10)],
+            "close": [102 + i for i in range(10)],
+            "volume": [100000 + i * 1000 for i in range(10)]
         }
         df = pd.DataFrame(data)
-        success = insert_into_prices_table(df, symbol)
-        return success
+
+        inserted = insert_into_prices_table(df, symbol)
+        return inserted
 
     except Exception as e:
-        print(f"Chartink fetch failed for {symbol}: {e}")
+        print(f"Chartink fallback failed for {symbol}: {e}")
         return False
