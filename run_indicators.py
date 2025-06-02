@@ -10,7 +10,7 @@ conn = sqlite3.connect("nifty_stocks.db")
 cursor = conn.cursor()
 
 # ✅ Fetch all stock symbols
-symbols = get_all_symbols()
+symbols = get_all_symbols(cursor)
 
 print(f"📊 Total stocks: {len(symbols)}")
 
