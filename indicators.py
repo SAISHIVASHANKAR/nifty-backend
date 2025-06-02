@@ -1,98 +1,102 @@
+# indicators.py
+
 import pandas_ta as ta
-import pandas as pd
-from utils import insert_indicator_signal
 
-def compute_all_indicators(df, symbol, cursor):
-    if 'Date' not in df.columns:
-        print(f"⚠️ Skipping {symbol}: 'Date' column missing.")
-        return
+def compute_all_indicators(df):
+    df = df.copy()
+    
+    # ADX(15)
+    df['ADX'] = ta.adx(df['high'], df['low'], df['close'], length=15)['ADX_15']
 
-    df['Date'] = pd.to_datetime(df['Date'])
-    df.set_index('Date', inplace=True)
+    # VWAP(10)
+    df['VWAP'] = ta.vwap(df['high'], df['low'], df['close'], df['volume'])
 
-    trend_score = 0
-    momentum_score = 0
-    volume_score = 0
-    volatility_score = 0
-    support_resistance_score = 0
+    # MACD(18, 36, 9)
+    macd = ta.macd(df['close'], fast=18, slow=36, signal=9)
+    df['MACD'] = macd['MACD_18_36_9']
+    df['MACD_signal'] = macd['MACDs_18_36_9']
 
-    # Trend Indicators
-    try:
-        df['ADX'] = ta.adx(df['High'], df['Low'], df['Close'], length=15)['ADX_15']
-        if df['ADX'].iloc[-1] > 25:
-            trend_score += 1
-    except:
-        print(f"Trend: ADX failed for {symbol}")
+    # RSI(15)
+    df['RSI'] = ta.rsi(df['close'], length=15)
 
-    try:
-        df['VWAP'] = ta.vwap(df['High'], df['Low'], df['Close'], df['Volume'])
-        if df['Close'].iloc[-1] > df['VWAP'].iloc[-1]:
-            trend_score += 1
-    except:
-        print(f"Trend: VWAP failed for {symbol}")
+    # Chaikin Oscillator(15)
+    chaikin = ta.chaikin(df['high'], df['low'], df['close'], df['volume'], fast=3, slow=10)
+    df['Chaikin'] = chaikin
 
-    # Momentum Indicators
-    try:
-        macd = ta.macd(df['Close'], fast=18, slow=36, signal=9)
-        if macd['MACD_18_36_9'].iloc[-1] > macd['MACDs_18_36_9'].iloc[-1]:
-            momentum_score += 1
-    except:
-        print(f"Momentum: MACD failed for {symbol}")
+    # OBV
+    df['OBV'] = ta.obv(df['close'], df['volume'])
 
-    try:
-        df['RSI'] = ta.rsi(df['Close'], length=15)
-        if df['RSI'].iloc[-1] > 50:
-            momentum_score += 1
-    except:
-        print(f"Momentum: RSI failed for {symbol}")
+    # ATR(15)
+    df['ATR'] = ta.atr(df['high'], df['low'], df['close'], length=15)
 
-    # Volume Indicators
-    try:
-        obv = ta.obv(df['Close'], df['Volume'])
-        if obv.iloc[-1] > obv.iloc[-15]:
-            volume_score += 1
-    except:
-        print(f"Volume: OBV failed for {symbol}")
+    # Bollinger Bands(30, 2)
+    bb = ta.bbands(df['close'], length=30, std=2)
+    df['BB_upper'] = bb['BBU_30_2.0']
+    df['BB_lower'] = bb['BBL_30_2.0']
 
-    try:
-        cho = ta.ad(df['High'], df['Low'], df['Close'], df['Volume'])
-        if cho.iloc[-1] > cho.iloc[-15]:
-            volume_score += 1
-    except:
-        print(f"Volume: Chaikin failed for {symbol}")
+    # Fibonacci Retracement not needed to be added in column, used for S/R scoring only
+    # Gann Fan (1:1) placeholder logic: using trendline direction
+    df['GANN'] = df['close'].diff(7)
 
-    # Volatility Indicators
-    try:
-        atr = ta.atr(df['High'], df['Low'], df['Close'], length=15)
-        if atr.iloc[-1] > atr.iloc[-15]:
-            volatility_score += 1
-    except:
-        print(f"Volatility: ATR failed for {symbol}")
+    return df
 
-    try:
-        bb = ta.bbands(df['Close'], length=30, std=2)
-        if df['Close'].iloc[-1] < bb['BBL_30_2.0'].iloc[-1]:
-            volatility_score += 1
-    except:
-        print(f"Volatility: BBands failed for {symbol}")
+def generate_scores(df):
+    scores = {
+        "trend": 0,
+        "momentum": 0,
+        "volume": 0,
+        "volatility": 0,
+        "support_resistance": 0
+    }
 
-    # Support/Resistance Indicators
-    try:
-        df['Gann'] = df['Close'] + ((df['High'] - df['Low']) / 8)
-        if df['Close'].iloc[-1] > df['Gann'].iloc[-1]:
-            support_resistance_score += 1
-    except:
-        print(f"Support: Gann Fan failed for {symbol}")
+    if df.empty or len(df) < 30:
+        return scores
 
-    try:
-        recent = df['Close'].tail(30)
-        high = recent.max()
-        low = recent.min()
-        fib_0_618 = high - (high - low) * 0.618
-        if df['Close'].iloc[-1] > fib_0_618:
-            support_resistance_score += 1
-    except:
-        print(f"Support: Fibonacci failed for {symbol}")
+    latest = df.iloc[-1]
 
-    date = df.index[-1].strftime("%Y-%m-%d")
-    insert_indicator_signal(cursor, symbol, trend_score, momentum_score, volume_score, volatility_score, support_resistance_score, date)
+    # Trend: ADX + VWAP
+    if latest['ADX'] > 25:
+        scores["trend"] += 1
+    if latest['close'] > latest['VWAP']:
+        scores["trend"] += 1
+    else:
+        scores["trend"] -= 1
+
+    # Momentum: MACD + RSI
+    if latest['MACD'] > latest['MACD_signal']:
+        scores["momentum"] += 1
+    else:
+        scores["momentum"] -= 1
+    if latest['RSI'] > 55:
+        scores["momentum"] += 1
+    elif latest['RSI'] < 45:
+        scores["momentum"] -= 1
+
+    # Volume: OBV + Chaikin
+    if latest['Chaikin'] > 0:
+        scores["volume"] += 1
+    else:
+        scores["volume"] -= 1
+    if df['OBV'].iloc[-1] > df['OBV'].iloc[-5]:
+        scores["volume"] += 1
+    else:
+        scores["volume"] -= 1
+
+    # Volatility: ATR + Bollinger Bands
+    if latest['ATR'] > df['ATR'].mean():
+        scores["volatility"] += 1
+    if latest['close'] < latest['BB_lower']:
+        scores["volatility"] -= 1
+    elif latest['close'] > latest['BB_upper']:
+        scores["volatility"] += 1
+
+    # Support/Resistance: Fibonacci + GANN
+    if df['close'].iloc[-1] > df['close'].max() * 0.786:
+        scores["support_resistance"] -= 1
+    elif df['close'].iloc[-1] < df['close'].min() * 1.236:
+        scores["support_resistance"] += 1
+
+    if latest['GANN'] > 0:
+        scores["support_resistance"] += 1
+
+    return scores
