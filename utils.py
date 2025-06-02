@@ -15,7 +15,7 @@ def insert_into_prices_table(df, symbol):
     conn.commit()
     conn.close()
 
-def insert_indicator_signal(cursor, symbol, trend, momentum, volume, volatility, support_resistance):
+def insert_into_indicator_signal(cursor, symbol, trend, momentum, volume, volatility, support_resistance):
     cursor.execute(
         """INSERT OR REPLACE INTO indicator_signals
            (symbol, trend, momentum, volume, volatility, support_resistance)
