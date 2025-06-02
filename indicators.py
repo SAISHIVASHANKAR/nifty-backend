@@ -5,10 +5,9 @@ from utils import insert_into_indicator_signals
 def compute_all_indicators(df, symbol, cursor):
     try:
         df = df.copy()
-        df['date'] = pd.to_datetime(df['date'])
-        df.set_index('date', inplace=True)
-        df = df.dropna(subset=['open', 'high', 'low', 'close', 'volume'])
-
+        df['date'] = pd.to_datetime(df['date'])     # Ensure datetime format
+        df.set_index('date', inplace=True)          # Set date as index
+        df.index = df.index.tz_localize(None)       # Remove timezone to avoid warnings
         score = {
             "trend": 0,
             "momentum": 0,
