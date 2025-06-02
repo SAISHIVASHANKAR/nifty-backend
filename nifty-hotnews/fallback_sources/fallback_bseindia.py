@@ -4,7 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 
-def fetch_from_bse():
+def fetch_news():
     url = "https://www.bseindia.com/markets/MarketInfo/NewsResult.aspx"
     response = requests.get(url, timeout=10)
     soup = BeautifulSoup(response.text, "html.parser")
@@ -37,6 +37,6 @@ def fetch_from_bse():
 
 # Example test
 if __name__ == "__main__":
-    result = fetch_from_bse()
+    result = fetch_news()
     for item in result["highlights"]:
         print(f"{item['timestamp']} ➤ {item['headline']}")
