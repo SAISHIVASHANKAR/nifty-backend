@@ -1,6 +1,6 @@
 import sqlite3
 import pandas as pd
-from indicators import compute_all_indicators  # Removed generate_scores
+from indicators import compute_all_indicators
 from utils import get_all_symbols
 
 conn = sqlite3.connect("nifty_stocks.db")
