@@ -1,46 +1,44 @@
 # run_indicators.py
 
-from indicators import compute_all_indicators
-from utils import insert_into_prices_table, insert_indicator_signal, get_all_symbols(cursor)
 import sqlite3
 import pandas as pd
+from utils import get_db_connection, get_cached_df
+from indicators import compute_all_indicators
 
-# ✅ Connect to the SQLite database
-conn = sqlite3.connect("nifty_stocks.db")
-cursor = conn.cursor()
-
-# ✅ Fetch all stock symbols
-symbols = get_all_symbols(cursor)
-
-print(f"📊 Total stocks: {len(symbols)}")
-
-# ✅ Process each stock
-for i, symbol in enumerate(symbols, 1):
-    print(f"⏳[{i}/{len(symbols)}] Processing {symbol}...")
+def run_all_indicator_evaluations():
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
     try:
-        # ✅ Read stock data from DB
-        df = pd.read_sql_query(
-            f"SELECT * FROM prices WHERE symbol = ? ORDER BY date ASC", conn, params=(symbol,)
-        )
+        # Fetch distinct symbols from DB
+        cursor.execute("SELECT DISTINCT symbol FROM prices")
+        rows = cursor.fetchall()
+        symbols = [row[0] for row in rows]
 
-        if df.empty or len(df) < 30:
-            print(f"⚠️ Skipped {symbol} — insufficient data.")
-            continue
+        print(f"🟢 Running indicators for {len(symbols)} stocks...\n")
 
-        # ✅ Ensure date column is datetime
-        df["date"] = pd.to_datetime(df["date"], errors='coerce')
+        for i, symbol in enumerate(symbols, 1):
+            print(f"[{i}/{len(symbols)}] Processing: {symbol}")
 
-        # ✅ Drop rows with invalid dates
-        df = df.dropna(subset=["date"])
+            df = get_cached_df(symbol)
 
-        # ✅ Recompute indicators
-        compute_all_indicators(df, symbol, cursor)
+            if df.empty or len(df) < 50:
+                print(f"⚠️ Skipping {symbol}: insufficient data ({len(df)} rows)")
+                continue
+
+            try:
+                compute_all_indicators(df, symbol, cursor)
+            except Exception as e:
+                print(f"❌ compute_all_indicators() failed for {symbol}: {e}")
+                continue
+
+        conn.commit()
+        print("✅ All indicator signals inserted successfully.\n")
 
     except Exception as e:
-        print(f"❌ compute_all_indicators() failed for {symbol}: {e}")
+        print(f"💥 Unexpected error: {e}")
+    finally:
+        conn.close()
 
-# ✅ Commit and close connection
-conn.commit()
-conn.close()
-print("✅ All indicators processed.")
+if __name__ == "__main__":
+    run_all_indicator_evaluations()
