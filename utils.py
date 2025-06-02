@@ -1,3 +1,5 @@
+import utils
+print("Functions in utils.py:", dir(utils))
 import sqlite3
 import pandas as pd
 
