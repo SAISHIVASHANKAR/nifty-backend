@@ -1,84 +1,90 @@
 # indicators.py
 
 import pandas as pd
-import numpy as np
-import talib
+import pandas_ta as ta
+from utils import insert_indicator_signal
 
 def compute_all_indicators(df, cursor, symbol):
     try:
         df = df.copy()
+        df["date"] = pd.to_datetime(df["date"])
+        df.set_index("date", inplace=True)
+        score = 0
 
-        # Ensure 'date' column exists and is datetime
-        df['date'] = pd.to_datetime(df['date'])
-        df.sort_values('date', inplace=True)
+        # Momentum
+        macd = ta.macd(df["close"], fast=18, slow=36, signal=9)
+        if macd is not None and not macd.isnull().values.any():
+            if macd["MACD_18_36_9"].iloc[-1] > macd["MACDs_18_36_9"].iloc[-1]:
+                score += 1
+            else:
+                score -= 1
 
-        # RSI (15)
-        df['RSI'] = talib.RSI(df['close'], timeperiod=15)
-        rsi_signal = 1 if df['RSI'].iloc[-1] < 30 else -1 if df['RSI'].iloc[-1] > 70 else 0
+        rsi = ta.rsi(df["close"], length=15)
+        if rsi is not None and not rsi.isnull().values.any():
+            if rsi.iloc[-1] > 50:
+                score += 1
+            else:
+                score -= 1
 
-        # MACD (fast=18, slow=36, signal=9)
-        macd, signal, hist = talib.MACD(df['close'], fastperiod=18, slowperiod=36, signalperiod=9)
-        macd_signal = 1 if macd.iloc[-1] > signal.iloc[-1] else -1
+        # Trend
+        adx = ta.adx(df["high"], df["low"], df["close"], length=15)
+        if adx is not None and not adx.isnull().values.any():
+            if adx["ADX_15"].iloc[-1] > 25:
+                score += 1
+            else:
+                score -= 1
 
-        # OBV
-        df['OBV'] = talib.OBV(df['close'], df['volume'])
-        obv_signal = 1 if df['OBV'].iloc[-1] > df['OBV'].iloc[-5] else -1
+        vwap = ta.vwap(df["high"], df["low"], df["close"], df["volume"], anchor="D")
+        if vwap is not None and not vwap.isnull().values.any():
+            if df["close"].iloc[-1] > vwap.iloc[-1]:
+                score += 1
+            else:
+                score -= 1
 
-        # Bollinger Bands (30,2)
-        upper, middle, lower = talib.BBANDS(df['close'], timeperiod=30, nbdevup=2, nbdevdn=2)
-        bb_signal = 1 if df['close'].iloc[-1] < lower.iloc[-1] else -1 if df['close'].iloc[-1] > upper.iloc[-1] else 0
+        # Volume
+        obv = ta.obv(df["close"], df["volume"])
+        if obv is not None and not obv.isnull().values.any():
+            if obv.iloc[-1] > obv.iloc[-2]:
+                score += 1
+            else:
+                score -= 1
 
-        # Fibonacci support/resistance levels (simulated)
-        high = df['high'].max()
-        low = df['low'].min()
-        current = df['close'].iloc[-1]
-        fib_signal = 1 if current < low + 0.382*(high-low) else -1 if current > high - 0.382*(high-low) else 0
+        chaikin = ta.adosc(df["high"], df["low"], df["close"], df["volume"], fast=3, slow=10)
+        if chaikin is not None and not chaikin.isnull().values.any():
+            if chaikin.iloc[-1] > 0:
+                score += 1
+            else:
+                score -= 1
 
-        # ADX (15)
-        adx = talib.ADX(df['high'], df['low'], df['close'], timeperiod=15)
-        adx_signal = 1 if adx.iloc[-1] > 25 else 0
+        # Volatility
+        atr = ta.atr(df["high"], df["low"], df["close"], length=15)
+        if atr is not None and not atr.isnull().values.any():
+            if atr.iloc[-1] > atr.iloc[-2]:
+                score += 1
+            else:
+                score -= 1
 
-        # ATR (15)
-        atr = talib.ATR(df['high'], df['low'], df['close'], timeperiod=15)
-        atr_signal = 1 if atr.iloc[-1] > atr.mean() else 0
+        bbands = ta.bbands(df["close"], length=30, std=2)
+        if bbands is not None and not bbands.isnull().values.any():
+            if df["close"].iloc[-1] > bbands["BBL_30_2.0"].iloc[-1]:
+                score += 1
+            else:
+                score -= 1
 
-        # Chaikin Oscillator (15)
-        ad = talib.AD(df['high'], df['low'], df['close'], df['volume'])
-        chaikin = ad.rolling(15).mean()
-        chaikin_signal = 1 if chaikin.iloc[-1] > chaikin.iloc[-2] else -1
+        # Support/Resistance
+        fib_support = df["close"].max() * 0.618
+        if df["close"].iloc[-1] > fib_support:
+            score += 1
+        else:
+            score -= 1
 
-        # Gann Fan (stub logic)
-        gann_signal = 1 if current > (high + low) / 2 else -1
+        gann_support = df["close"].mean()
+        if df["close"].iloc[-1] > gann_support:
+            score += 1
+        else:
+            score -= 1
 
-        # VWAP (10-day simulated)
-        df['TP'] = (df['high'] + df['low'] + df['close']) / 3
-        df['TPV'] = df['TP'] * df['volume']
-        vwap = df['TPV'].rolling(10).sum() / df['volume'].rolling(10).sum()
-        vwap_signal = 1 if df['close'].iloc[-1] > vwap.iloc[-1] else -1
-
-        # Prepare indicator scoring
-        signal_data = {
-            "symbol": symbol,
-            "trend": adx_signal + vwap_signal,
-            "momentum": macd_signal + rsi_signal,
-            "volume": chaikin_signal + obv_signal,
-            "volatility": atr_signal + bb_signal,
-            "support_resistance": fib_signal + gann_signal,
-        }
-
-        # Insert into DB
-        cursor.execute("""
-            INSERT OR REPLACE INTO indicator_signals
-            (symbol, trend, momentum, volume, volatility, support_resistance)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            signal_data["symbol"],
-            signal_data["trend"],
-            signal_data["momentum"],
-            signal_data["volume"],
-            signal_data["volatility"],
-            signal_data["support_resistance"]
-        ))
+        insert_indicator_signal(symbol, score, cursor)
 
     except Exception as e:
-        print(f"Error computing indicators for {symbol}: {e}")
+        print(f"❌ Error computing indicators for {symbol}: {e}")
