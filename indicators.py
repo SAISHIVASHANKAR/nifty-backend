@@ -55,7 +55,7 @@ def compute_all_indicators(df, symbol, cursor):
         print(f"Volume: OBV failed for {symbol}")
 
     try:
-        cho = ta.ad(df['High'], df['Low'], df['Close'], df['Volume'])  # Chaikin Oscillator (Accum/Dist Line)
+        cho = ta.ad(df['High'], df['Low'], df['Close'], df['Volume'])
         if cho.iloc[-1] > cho.iloc[-15]:
             volume_score += 1
     except:
@@ -85,8 +85,11 @@ def compute_all_indicators(df, symbol, cursor):
         print(f"Support: Gann Fan failed for {symbol}")
 
     try:
-        fib = ta.fibonacci.retracement(df['Close'])
-        if df['Close'].iloc[-1] > fib.iloc[-1]:
+        recent = df['Close'].tail(30)
+        high = recent.max()
+        low = recent.min()
+        fib_0_618 = high - (high - low) * 0.618
+        if df['Close'].iloc[-1] > fib_0_618:
             support_resistance_score += 1
     except:
         print(f"Support: Fibonacci failed for {symbol}")
