@@ -1,5 +1,6 @@
 # run_indicators.py
-
+import utils
+print(dir(utils))
 import sqlite3
 from utils import (
     get_all_symbols,
