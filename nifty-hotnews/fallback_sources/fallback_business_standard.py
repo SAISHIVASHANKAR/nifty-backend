@@ -4,7 +4,6 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 
 def fetch_news(mode="sod"):
-def fetch_news(mode="sod"):
     print("[Business Standard] Fetching in mode:", mode)
     return [
         {
