@@ -53,3 +53,24 @@ def symbol_has_data(symbol):
     except Exception as e:
         print(f"DB check failed for {symbol}: {e}")
         return False
+
+def insert_indicator_signal(symbol, category, signal):
+    try:
+        conn = get_db_connection()
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS indicator_signals (symbol TEXT, category TEXT, signal INTEGER)"
+        )
+        conn.execute(
+            "DELETE FROM indicator_signals WHERE symbol = ? AND category = ?",
+            (symbol, category),
+        )
+        conn.execute(
+            "INSERT INTO indicator_signals (symbol, category, signal) VALUES (?, ?, ?)",
+            (symbol, category, signal),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"❌ DB insert error for {symbol}, {category}: {e}")
+        return False
