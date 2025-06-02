@@ -18,14 +18,6 @@ def insert_into_prices_table(df, symbol):
     conn.commit()
     conn.close()
 
-def insert_into_indicator_signal(cursor, symbol, trend, momentum, volume, volatility, support_resistance):
-    cursor.execute(
-        """INSERT OR REPLACE INTO indicator_signals
-           (symbol, trend, momentum, volume, volatility, support_resistance)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (symbol, trend, momentum, volume, volatility, support_resistance)
-    )
-
 def get_all_symbols(cursor):
     cursor.execute("SELECT DISTINCT symbol FROM prices")
     results = cursor.fetchall()
@@ -41,3 +33,10 @@ def get_cached_df(symbol):
     except Exception as e:
         print(f"❌ DB read error for {symbol}: {e}")
         return pd.DataFrame()
+
+def insert_into_indicator_signal(cursor, symbol, trend, momentum, volume, volatility, support_resistance):
+    cursor.execute(
+        """INSERT OR REPLACE INTO indicator_signals
+           (symbol, trend, momentum, volume, volatility, support_resistance)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (symbol, trend, momentum, volume, volatility, support_resistance)) 
