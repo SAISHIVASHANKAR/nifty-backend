@@ -1,6 +1,8 @@
+# indicators.py
+
 import pandas as pd
 import pandas_ta as ta
-from utils import insert_indicator_signal  # ✅ Correct function
+from utils import insert_indicator_signal
 
 def compute_all_indicators(df, symbol, cursor):
     required_cols = ['open', 'high', 'low', 'close', 'volume']
@@ -20,8 +22,9 @@ def compute_all_indicators(df, symbol, cursor):
         df['CHA'] = ta.chaikin(df['high'], df['low'], df['close'], df['volume'])
         df['FIB'] = (df['close'] - df['low'].rolling(14).min()) / (
             df['high'].rolling(14).max() - df['low'].rolling(14).min())
-        df['GANN'] = (df['high'] + df['low']) / 2  # Placeholder logic
+        df['GANN'] = (df['high'] + df['low']) / 2
 
+        # Score each category
         trend = int(df['ADX'].iloc[-1] > 25) + int(df['VWAP'].iloc[-1] > df['close'].iloc[-1])
         momentum = int(df['MACD'].iloc[-1] > 0) + int(df['RSI'].iloc[-1] > 50)
         volume = int(df['OBV'].iloc[-1] > df['OBV'].iloc[-15]) + int(df['CHA'].iloc[-1] > 0)
