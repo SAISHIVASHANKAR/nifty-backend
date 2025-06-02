@@ -1,46 +1,55 @@
 # run_indicators.py
 
+import sqlite3
 from utils import (
-    get_cached_df,
-    get_db_connection,
     get_all_symbols,
-    insert_into_prices_table,
-    insert_into_indicator_signal
+    get_cached_df,
+    insert_into_indicator_signal,
+    get_db_connection
 )
-def run_all_indicator_evaluations():
-    conn = get_db_connection()
-    cursor = conn.cursor()
+from indicators import compute_all_indicators
 
+def run_all():
     try:
-        # Fetch distinct symbols from DB
-        cursor.execute("SELECT DISTINCT symbol FROM prices")
-        rows = cursor.fetchall()
-        symbols = [row[0] for row in rows]
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        symbols = get_all_symbols(cursor)
 
-        print(f"🟢 Running indicators for {len(symbols)} stocks...\n")
+        print(f"🟡 Found {len(symbols)} symbols in DB")
 
-        for i, symbol in enumerate(symbols, 1):
-            print(f"[{i}/{len(symbols)}] Processing: {symbol}")
-
+        for symbol in symbols:
+            print(f"🟠 Evaluating {symbol} ...")
             df = get_cached_df(symbol)
 
             if df.empty or len(df) < 50:
-                print(f"⚠️ Skipping {symbol}: insufficient data ({len(df)} rows)")
+                print(f"⚠️ Skipping {symbol} due to insufficient data.")
                 continue
 
             try:
-                compute_all_indicators(df, symbol, cursor)
+                trend, momentum, volume, volatility, support_resistance = compute_all_indicators(df)
+
+                insert_into_indicator_signal(
+                    cursor,
+                    symbol,
+                    trend,
+                    momentum,
+                    volume,
+                    volatility,
+                    support_resistance
+                )
+
+                print(f"✅ Saved signals for {symbol}")
+
             except Exception as e:
-                print(f"❌ compute_all_indicators() failed for {symbol}: {e}")
+                print(f"❌ Failed for {symbol}: {e}")
                 continue
 
         conn.commit()
-        print("✅ All indicator signals inserted successfully.\n")
+        conn.close()
+        print("✅ All signals committed to DB")
 
     except Exception as e:
-        print(f"💥 Unexpected error: {e}")
-    finally:
-        conn.close()
+        print(f"🔥 Unexpected error during run_all: {e}")
 
 if __name__ == "__main__":
-    run_all_indicator_evaluations()
+    run_all()
