@@ -27,8 +27,7 @@ def run_all():
                 continue
 
             try:
-                trend, momentum, volume, volatility, support_resistance = compute_all_indicators(df)
-
+                trend, momentum, volume, volatility, support_resistance = compute_all_indicators(df, symbol, cursor)
                 insert_into_indicator_signals(
                     cursor,
                     symbol,
