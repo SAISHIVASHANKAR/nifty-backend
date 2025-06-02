@@ -57,3 +57,13 @@ def insert_signal(symbol, scores):
         print(f"✅ Signal inserted for {symbol}")
     except Exception as e:
         print(f"❌ Failed to insert signal for {symbol}: {e}")
+
+def get_all_symbols():
+    try:
+        conn = get_db_connection()
+        df = pd.read_sql_query("SELECT DISTINCT symbol FROM prices", conn)
+        conn.close()
+        return df["symbol"].tolist()
+    except Exception as e:
+        print(f"Error fetching symbols: {e}")
+        return []
