@@ -39,4 +39,5 @@ def insert_into_indicator_signals(cursor, symbol, trend, momentum, volume, volat
         """INSERT OR REPLACE INTO indicator_signals
            (symbol, trend, momentum, volume, volatility, support_resistance)
            VALUES (?, ?, ?, ?, ?, ?)""",
-        (symbol, trend, momentum, volume, volatility, support_resistance)) 
+        (symbol, trend, momentum, volume, volatility, support_resistance)
+    )
