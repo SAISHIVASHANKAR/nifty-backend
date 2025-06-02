@@ -1,41 +1,23 @@
-# run_indicators.py
+import sqlite3
+import pandas as pd
+from indicators import compute_all_indicators  # Removed generate_scores
+from utils import get_all_symbols
 
-from stocks import STOCKS
-from utils import get_cached_df, insert_signal
-from indicators import compute_all_indicators, generate_scores
+conn = sqlite3.connect("nifty_stocks.db")
+cursor = conn.cursor()
 
-def main():
-    for symbol in STOCKS:
-        print(f"\n📈 Processing {symbol}")
-        try:
-            df = get_cached_df(symbol)
-            if df.empty:
-                print(f"⚠️ Skipping {symbol} - No data found.")
-                continue
-            if len(df) < 30:
-                print(f"⚠️ Skipping {symbol} - Not enough data ({len(df)} rows).")
-                continue
+symbols = get_all_symbols(cursor)
 
-            try:
-                df = compute_all_indicators(df)
-            except Exception as e:
-                print(f"❌ compute_all_indicators() failed for {symbol}: {e}")
-                continue
+print(f"📊 Total stocks: {len(symbols)}")
 
-            try:
-                scores = generate_scores(df)
-            except Exception as e:
-                print(f"❌ generate_scores() failed for {symbol}: {e}")
-                continue
+for i, symbol in enumerate(symbols, 1):
+    print(f"⏳[{i}/{len(symbols)}] Processing {symbol}...")
+    try:
+        df = pd.read_sql_query(f"SELECT * FROM prices WHERE Symbol = '{symbol}' ORDER BY Date ASC", conn)
+        df.columns = [col.lower() for col in df.columns]
+        df['date'] = pd.to_datetime(df['date'])
+        compute_all_indicators(df, symbol)
+    except Exception as e:
+        print(f"❌ compute_all_indicators() failed for {symbol}: {e}")
 
-            try:
-                insert_signal(symbol, scores)
-            except Exception as e:
-                print(f"❌ insert_signal() failed for {symbol}: {e}")
-                continue
-
-        except Exception as e:
-            print(f"❌ Outer error in processing {symbol}: {e}")
-
-if __name__ == "__main__":
-    main()
+conn.close()
