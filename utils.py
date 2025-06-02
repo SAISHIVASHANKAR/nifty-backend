@@ -12,6 +12,7 @@ def insert_into_prices_table(df, symbol):
         df = df.copy()
         df["symbol"] = symbol
 
+        # Force correct lowercase column names
         df = df.rename(columns={
             "Date": "date",
             "Open": "open",
@@ -21,7 +22,10 @@ def insert_into_prices_table(df, symbol):
             "Volume": "volume"
         })
 
+        # Ensure correct column order
         df = df[["date", "open", "high", "low", "close", "volume", "symbol"]]
+
+        # Save to DB
         df.to_sql("prices", conn, if_exists="append", index=False)
         conn.close()
         return True
@@ -40,25 +44,3 @@ def get_cached_df(symbol):
     except Exception as e:
         print(f"Error loading from DB for {symbol}: {e}")
         return pd.DataFrame()
-
-def insert_indicator_signal(cursor, symbol, signal_dict):
-    try:
-        for category, value in signal_dict.items():
-            cursor.execute("""
-                INSERT INTO indicator_signals (symbol, category, score)
-                VALUES (?, ?, ?)
-            """, (symbol, category, value))
-    except Exception as e:
-        print(f"Error inserting indicator signal for {symbol}: {e}")
-
-def symbol_has_data(symbol):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM prices WHERE symbol = ?", (symbol,))
-        count = cursor.fetchone()[0]
-        conn.close()
-        return count > 0
-    except Exception as e:
-        print(f"Error checking data for {symbol}: {e}")
-        return False
