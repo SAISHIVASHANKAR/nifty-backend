@@ -1,33 +1,33 @@
 # run_indicators.py
 
 import sqlite3
-from indicators import compute_all_indicators
-from utils import get_db_connection
-from stocks import STOCKS
 import pandas as pd
+from indicators import compute_all_indicators
+from utils import get_cached_df
+from stocks import STOCKS
 
-def run_all():
-    conn = get_db_connection()
-    cursor = conn.cursor()
+def run_all_indicators():
+    try:
+        conn = sqlite3.connect("nifty_stocks.db")
+        cursor = conn.cursor()
 
-    for idx, symbol in enumerate(STOCKS.keys(), 1):
-        try:
-            print(f"[{idx}/{len(STOCKS)}] Processing: {symbol}")
-            query = "SELECT * FROM prices WHERE symbol = ? ORDER BY date"
-            df = pd.read_sql_query(query, conn, params=(symbol,))
+        print(f"📊 Total stocks: {len(STOCKS)}")
+        for i, symbol in enumerate(STOCKS.keys(), 1):
+            print(f"\n⏳ [{i}/{len(STOCKS)}] Processing {symbol}...")
+            df = get_cached_df(symbol)
 
-            if df.empty or len(df) < 100:
-                print(f"⚠️Skipping {symbol}: Not enough data")
+            if df.empty or len(df) < 50:
+                print(f"⚠️ Skipping {symbol}, not enough data")
                 continue
 
             compute_all_indicators(df, cursor, symbol)
 
-        except Exception as e:
-            print(f"❌Error processing {symbol}: {e}")
+        conn.commit()
+        conn.close()
+        print("\n✅ All indicators processed successfully.")
 
-    conn.commit()
-    conn.close()
-    print("✅All signals saved to DB.")
+    except Exception as e:
+        print(f"❌ Error during indicator processing: {e}")
 
 if __name__ == "__main__":
-    run_all()
+    run_all_indicators()
