@@ -1,10 +1,13 @@
 # run_indicators.py
 
+import sqlite3
 from stocks import STOCKS
-from utils import get_cached_df, insert_indicator_signal, get_db_connection
+from utils import get_cached_df
 from indicators import compute_all_indicators
 
-conn, cursor = get_db_connection()
+# Create a single DB connection and cursor to be reused
+conn = sqlite3.connect("nifty_stocks.db")
+cursor = conn.cursor()
 
 for symbol in STOCKS:
     df = get_cached_df(symbol)
