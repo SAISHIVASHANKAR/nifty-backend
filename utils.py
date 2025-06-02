@@ -1,7 +1,7 @@
-
 import sqlite3
 import pandas as pd
-from config import DB_PATH
+
+DB_PATH = "nifty_stocks.db"
 
 def insert_into_prices_table(df, symbol):
     conn = sqlite3.connect(DB_PATH)
