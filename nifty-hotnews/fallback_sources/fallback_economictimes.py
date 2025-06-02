@@ -4,10 +4,14 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 
 def fetch_news(mode="sod"):
-    url = "https://economictimes.indiatimes.com/markets"
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    print("[Economic Times] Fetching in mode:", mode)
+    return [
+        {
+            "timestamp": "2025-06-02 09:00:00",
+            "headline": "Economic Times Top News Headline Example",
+            "source": "Economic Times"
+        }
+    ]
 
     try:
         response = requests.get(url, headers=headers, timeout=10)
