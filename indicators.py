@@ -1,6 +1,6 @@
 import pandas as pd
 import pandas_ta as ta
-from utils import insert_signal  # ✅ Correct import
+from utils import insert_indicator_signal  # ✅ Correct import
 
 def compute_all_indicators(df, symbol):
     required_cols = ['open', 'high', 'low', 'close', 'volume']
