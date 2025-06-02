@@ -1,54 +1,36 @@
 # run_indicators.py
 
 from indicators import compute_all_indicators
-from utils import get_db_connection
+from utils import get_cached_df, get_db_connection
+
 from stocks import STOCKS
-import pandas as pd
 
-def save_signals_to_db(signal_dict):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS indicator_signals (
-            symbol TEXT PRIMARY KEY,
-            trend INTEGER,
-            momentum INTEGER,
-            volume INTEGER,
-            volatility INTEGER,
-            support_resistance INTEGER,
-            total_score INTEGER
-        )
-    """)
-    for symbol, signals in signal_dict.items():
-        cursor.execute("""
-            INSERT OR REPLACE INTO indicator_signals (symbol, trend, momentum, volume, volatility, support_resistance, total_score)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            symbol,
-            signals['trend'],
-            signals['momentum'],
-            signals['volume'],
-            signals['volatility'],
-            signals['support_resistance'],
-            signals['total_score']
-        ))
-    conn.commit()
-    conn.close()
+print("📊 Running indicators and saving signals to DB...\n")
 
-def main():
-    signal_summary = {}
-    for symbol in STOCKS:
-        try:
-            result = compute_all_indicators(symbol)
-            if result:
-                signal_summary[symbol] = result
-                print(f"✅ Processed {symbol}")
-            else:
-                print(f"❌ Skipped {symbol}: No result")
-        except Exception as e:
-            print(f"❌ Error processing {symbol}: {e}")
-    save_signals_to_db(signal_summary)
-    print("✅ All signals saved to DB.")
+total = len(STOCKS)
+success = 0
+failure = 0
 
-if __name__ == "__main__":
-    main()
+for i, symbol in enumerate(STOCKS, 1):
+    print(f"[{i}/{total}] Processing: {symbol}")
+    df = get_cached_df(symbol)
+
+    if df.empty:
+        print(f"⚠️ Skipping {symbol}: No usable DB data")
+        failure += 1
+        continue
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        compute_all_indicators(df, symbol, cursor)
+        conn.commit()
+        conn.close()
+        success += 1
+    except Exception as e:
+        print(f"❌ Error processing {symbol}: {e}")
+        failure += 1
+
+print("✅ All signals saved to DB.")
+print(f"✔️ Total Success: {success}")
+print(f"❌ Total Failed: {failure}")
