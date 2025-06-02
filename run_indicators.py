@@ -1,6 +1,6 @@
 # run_indicators.py
 
-from indicators import compute_all_indicators
+from indicators import compute_all_signals
 from utils import insert_into_prices_table, insert_indicator_signal, get_all_symbols
 import sqlite3
 import pandas as pd
