@@ -33,7 +33,7 @@ def insert_into_prices_table(df, symbol):
 def get_cached_df(symbol):
     try:
         conn = get_db_connection()
-        query = f"SELECT * FROM prices WHERE symbol = ? ORDER BY date"
+        query = "SELECT * FROM prices WHERE symbol = ? ORDER BY date"
         df = pd.read_sql_query(query, conn, params=(symbol,))
         conn.close()
         return df
@@ -41,24 +41,19 @@ def get_cached_df(symbol):
         print(f"Error loading from DB for {symbol}: {e}")
         return pd.DataFrame()
 
-def symbol_has_data(symbol):
+def insert_signal(symbol, scores):
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM prices WHERE symbol = ?", (symbol,))
-        count = cursor.fetchone()[0]
+        df = pd.DataFrame([{
+            "symbol": symbol,
+            "trend": scores.get("trend", 0),
+            "momentum": scores.get("momentum", 0),
+            "volume": scores.get("volume", 0),
+            "volatility": scores.get("volatility", 0),
+            "support_resistance": scores.get("support_resistance", 0)
+        }])
+        df.to_sql("indicator_signals", conn, if_exists="append", index=False)
         conn.close()
-        return count > 0
+        print(f"✅ Signal inserted for {symbol}")
     except Exception as e:
-        print(f"DB check failed for {symbol}: {e}")
-        return False
-
-def insert_indicator_signal(cursor, symbol, trend, momentum, volume, volatility, support_resistance):
-    try:
-        cursor.execute('''
-            INSERT OR REPLACE INTO indicator_signals (
-                symbol, trend, momentum, volume, volatility, support_resistance
-            ) VALUES (?, ?, ?, ?, ?, ?)
-        ''', (symbol, trend, momentum, volume, volatility, support_resistance))
-    except Exception as e:
-        print(f"DB insert error for signal {symbol}: {e}")
+        print(f"❌ Failed to insert signal for {symbol}: {e}")
