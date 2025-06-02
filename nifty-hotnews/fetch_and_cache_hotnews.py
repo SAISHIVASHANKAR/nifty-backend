@@ -1,13 +1,11 @@
 # fetch_and_cache_hotnews.py
 
 import json
-from datetime import datetime
-from fallback_economictimes import fetch_news as fetch_et
-from fallback_moneycontrol import fetch_news as fetch_mc
-from fallback_bloombergquint import fetch_news as fetch_bq
-from fallback_business_standard import fetch_news as fetch_bs
-from fallback_bseindia import fetch_news as fetch_bse
-
+from fallback_sources.fallback_economictimes import fetch_news as fetch_et
+from fallback_sources.fallback_bloombergquint import fetch_news as fetch_bq
+from fallback_sources.fallback_moneycontrol import fetch_news as fetch_mc
+from fallback_sources.fallback_business_standard import fetch_news as fetch_bs
+from fallback_sources.fallback_bseindia import fetch_news as fetch_bse
 def fetch_and_cache_hotnews(mode="sod"):
     all_news = []
 
