@@ -34,7 +34,7 @@ def get_cached_df(symbol):
         print(f"❌ DB read error for {symbol}: {e}")
         return pd.DataFrame()
 
-def insert_into_indicator_signal(cursor, symbol, trend, momentum, volume, volatility, support_resistance):
+def insert_into_indicator_signals(cursor, symbol, trend, momentum, volume, volatility, support_resistance):
     cursor.execute(
         """INSERT OR REPLACE INTO indicator_signals
            (symbol, trend, momentum, volume, volatility, support_resistance)
