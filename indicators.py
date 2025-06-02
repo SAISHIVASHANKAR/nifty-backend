@@ -1,95 +1,95 @@
-# indicators.py
-
-import pandas as pd
 import pandas_ta as ta
+import pandas as pd
+from utils import insert_indicator_signal
 
-def compute_all_indicators(df):
-    scores = {
-        "trend": 0,
-        "momentum": 0,
-        "volume": 0,
-        "volatility": 0,
-        "support_resistance": 0
-    }
+def compute_all_indicators(df, symbol, cursor):
+    if 'Date' not in df.columns:
+        print(f"⚠️ Skipping {symbol}: 'Date' column missing.")
+        return
+
+    df['Date'] = pd.to_datetime(df['Date'])
+    df.set_index('Date', inplace=True)
+
+    trend_score = 0
+    momentum_score = 0
+    volume_score = 0
+    volatility_score = 0
+    support_resistance_score = 0
+
+    # Trend Indicators
+    try:
+        df['ADX'] = ta.adx(df['High'], df['Low'], df['Close'], length=15)['ADX_15']
+        if df['ADX'].iloc[-1] > 25:
+            trend_score += 1
+    except:
+        print(f"Trend: ADX failed for {symbol}")
 
     try:
-        # Ensure DataFrame is sorted by date
-        df = df.sort_values("date")
-        close = df["close"]
-        high = df["high"]
-        low = df["low"]
-        volume = df["volume"]
+        df['VWAP'] = ta.vwap(df['High'], df['Low'], df['Close'], df['Volume'])
+        if df['Close'].iloc[-1] > df['VWAP'].iloc[-1]:
+            trend_score += 1
+    except:
+        print(f"Trend: VWAP failed for {symbol}")
 
-        # === Trend Indicators ===
-        df["ADX"] = ta.adx(high, low, close, length=15)["ADX_15"]
-        if df["ADX"].iloc[-1] > 25:
-            scores["trend"] += 1
-        else:
-            scores["trend"] -= 1
+    # Momentum Indicators
+    try:
+        macd = ta.macd(df['Close'], fast=18, slow=36, signal=9)
+        if macd['MACD_18_36_9'].iloc[-1] > macd['MACDs_18_36_9'].iloc[-1]:
+            momentum_score += 1
+    except:
+        print(f"Momentum: MACD failed for {symbol}")
 
-        df["VWAP"] = ta.vwap(high, low, close, volume=volume)
-        if close.iloc[-1] > df["VWAP"].iloc[-1]:
-            scores["trend"] += 1
-        else:
-            scores["trend"] -= 1
+    try:
+        df['RSI'] = ta.rsi(df['Close'], length=15)
+        if df['RSI'].iloc[-1] > 50:
+            momentum_score += 1
+    except:
+        print(f"Momentum: RSI failed for {symbol}")
 
-        # === Momentum Indicators ===
-        macd = ta.macd(close, fast=18, slow=36, signal=9)
-        if macd["MACD_18_36_9"].iloc[-1] > macd["MACDs_18_36_9"].iloc[-1]:
-            scores["momentum"] += 1
-        else:
-            scores["momentum"] -= 1
+    # Volume Indicators
+    try:
+        obv = ta.obv(df['Close'], df['Volume'])
+        if obv.iloc[-1] > obv.iloc[-15]:
+            volume_score += 1
+    except:
+        print(f"Volume: OBV failed for {symbol}")
 
-        df["RSI"] = ta.rsi(close, length=15)
-        if df["RSI"].iloc[-1] > 50:
-            scores["momentum"] += 1
-        else:
-            scores["momentum"] -= 1
+    try:
+        cho = ta.ad(df['High'], df['Low'], df['Close'], df['Volume'])  # Chaikin Oscillator (Accum/Dist Line)
+        if cho.iloc[-1] > cho.iloc[-15]:
+            volume_score += 1
+    except:
+        print(f"Volume: Chaikin failed for {symbol}")
 
-        # === Volume Indicators ===
-        obv = ta.obv(close, volume)
-        if obv.diff().iloc[-1] > 0:
-            scores["volume"] += 1
-        else:
-            scores["volume"] -= 1
+    # Volatility Indicators
+    try:
+        atr = ta.atr(df['High'], df['Low'], df['Close'], length=15)
+        if atr.iloc[-1] > atr.iloc[-15]:
+            volatility_score += 1
+    except:
+        print(f"Volatility: ATR failed for {symbol}")
 
-        chaikin = ta.chaikin(high, low, close, volume, fast=3, slow=10)
-        if chaikin.iloc[-1] > 0:
-            scores["volume"] += 1
-        else:
-            scores["volume"] -= 1
+    try:
+        bb = ta.bbands(df['Close'], length=30, std=2)
+        if df['Close'].iloc[-1] < bb['BBL_30_2.0'].iloc[-1]:
+            volatility_score += 1
+    except:
+        print(f"Volatility: BBands failed for {symbol}")
 
-        # === Volatility Indicators ===
-        df["ATR"] = ta.atr(high, low, close, length=15)
-        if df["ATR"].iloc[-1] > df["ATR"].mean():
-            scores["volatility"] += 1
-        else:
-            scores["volatility"] -= 1
+    # Support/Resistance Indicators
+    try:
+        df['Gann'] = df['Close'] + ((df['High'] - df['Low']) / 8)
+        if df['Close'].iloc[-1] > df['Gann'].iloc[-1]:
+            support_resistance_score += 1
+    except:
+        print(f"Support: Gann Fan failed for {symbol}")
 
-        bb = ta.bbands(close, length=30, std=2)
-        if close.iloc[-1] < bb["BBL_30_2.0"].iloc[-1]:
-            scores["volatility"] -= 1
-        elif close.iloc[-1] > bb["BBU_30_2.0"].iloc[-1]:
-            scores["volatility"] += 1
+    try:
+        fib = ta.fibonacci.retracement(df['Close'])
+        if df['Close'].iloc[-1] > fib.iloc[-1]:
+            support_resistance_score += 1
+    except:
+        print(f"Support: Fibonacci failed for {symbol}")
 
-        # === Support/Resistance ===
-        # Gann Fan: if price above 1:1 angle (simulated with moving average)
-        df["GannFan"] = ta.sma(close, length=30)
-        if close.iloc[-1] > df["GannFan"].iloc[-1]:
-            scores["support_resistance"] += 1
-        else:
-            scores["support_resistance"] -= 1
-
-        # Fibonacci: simplified rule — check retracement level zone
-        recent_high = high.iloc[-20:].max()
-        recent_low = low.iloc[-20:].min()
-        fib_618 = recent_high - 0.618 * (recent_high - recent_low)
-        if close.iloc[-1] > fib_618:
-            scores["support_resistance"] += 1
-        else:
-            scores["support_resistance"] -= 1
-
-    except Exception as e:
-        print(f"Indicator computation error: {e}")
-
-    return scores
+    date = df.index[-1].strftime("%Y-%m-%d")
+    insert_indicator_signal(cursor, symbol, trend_score, momentum_score, volume_score, volatility_score, support_resistance_score, date)
