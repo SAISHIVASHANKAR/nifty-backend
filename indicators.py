@@ -1,109 +1,94 @@
 # indicators.py
 
-import numpy as np
 import pandas as pd
+import numpy as np
+from ta.trend import ADXIndicator, MACD
+from ta.momentum import RSIIndicator
+from ta.volume import OnBalanceVolumeIndicator
+from ta.volatility import BollingerBands, AverageTrueRange
 from utils import insert_indicator_signal
 
 def compute_all_indicators(symbol, df, cursor):
-    trend_score = 0
-    momentum_score = 0
-    volume_score = 0
-    volatility_score = 0
-    support_resistance_score = 0
-
     try:
         df = df.copy()
+        df["Date"] = pd.to_datetime(df["date"])
 
-        # === Trend Indicators ===
-        ## 1. ADX(15)
-        df['TR'] = np.maximum(df['High'] - df['Low'],
-                              np.maximum(abs(df['High'] - df['Close'].shift()),
-                                         abs(df['Low'] - df['Close'].shift())))
-        df['+DM'] = np.where((df['High'] - df['High'].shift()) > (df['Low'].shift() - df['Low']),
-                             np.maximum(df['High'] - df['High'].shift(), 0), 0)
-        df['-DM'] = np.where((df['Low'].shift() - df['Low']) > (df['High'] - df['High'].shift()),
-                             np.maximum(df['Low'].shift() - df['Low'], 0), 0)
-        TR14 = df['TR'].rolling(window=15).sum()
-        plusDM14 = df['+DM'].rolling(window=15).sum()
-        minusDM14 = df['-DM'].rolling(window=15).sum()
-        plusDI14 = 100 * (plusDM14 / TR14)
-        minusDI14 = 100 * (minusDM14 / TR14)
-        DX = 100 * abs(plusDI14 - minusDI14) / (plusDI14 + minusDI14)
-        df['ADX'] = DX.rolling(window=15).mean()
-        if df['ADX'].iloc[-1] > 20:
-            trend_score += 1
+        # Ensure necessary columns exist
+        if len(df) < 50:
+            print(f"⚠️ Not enough data for {symbol}")
+            return
 
-        ## 2. VWAP(10)
-        df['TP'] = (df['High'] + df['Low'] + df['Close']) / 3
-        df['VWAP'] = (df['TP'] * df['Volume']).rolling(window=10).sum() / df['Volume'].rolling(window=10).sum()
-        if df['Close'].iloc[-1] > df['VWAP'].iloc[-1]:
-            trend_score += 1
+        # === TREND ===
+        adx = ADXIndicator(df["high"], df["low"], df["close"], window=15).adx()
+        df["ADX"] = adx
+        trend_score = 1 if df["ADX"].iloc[-1] > 20 else -1
 
-        # === Momentum Indicators ===
-        ## 3. MACD (18, 36, 9)
-        df['EMA18'] = df['Close'].ewm(span=18, adjust=False).mean()
-        df['EMA36'] = df['Close'].ewm(span=36, adjust=False).mean()
-        df['MACD'] = df['EMA18'] - df['EMA36']
-        df['MACD_signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
-        if df['MACD'].iloc[-1] > df['MACD_signal'].iloc[-1]:
-            momentum_score += 1
+        df["VWAP"] = (df["volume"] * (df["high"] + df["low"] + df["close"]) / 3).cumsum() / df["volume"].cumsum()
+        trend_score += 1 if df["close"].iloc[-1] > df["VWAP"].iloc[-1] else -1
 
-        ## 4. RSI(15)
-        delta = df['Close'].diff()
-        gain = delta.where(delta > 0, 0)
-        loss = -delta.where(delta < 0, 0)
-        avg_gain = gain.rolling(window=15).mean()
-        avg_loss = loss.rolling(window=15).mean()
-        rs = avg_gain / avg_loss
-        df['RSI'] = 100 - (100 / (1 + rs))
-        if df['RSI'].iloc[-1] < 70 and df['RSI'].iloc[-1] > 30:
-            momentum_score += 1
+        # === MOMENTUM ===
+        macd = MACD(df["close"], window_slow=36, window_fast=18, window_sign=9)
+        df["MACD"] = macd.macd()
+        df["MACD_signal"] = macd.macd_signal()
+        momentum_score = 1 if df["MACD"].iloc[-1] > df["MACD_signal"].iloc[-1] else -1
 
-        # === Volume Indicators ===
-        ## 5. Chaikin Oscillator (15)
-        adl = ((2 * df['Close'] - df['High'] - df['Low']) / (df['High'] - df['Low']).replace(0, np.nan)) * df['Volume']
-        adl = adl.cumsum()
-        df['Chaikin'] = adl.ewm(span=3, adjust=False).mean() - adl.ewm(span=10, adjust=False).mean()
-        if df['Chaikin'].iloc[-1] > 0:
-            volume_score += 1
+        rsi = RSIIndicator(df["close"], window=15).rsi()
+        df["RSI"] = rsi
+        momentum_score += 1 if df["RSI"].iloc[-1] > 50 else -1
 
-        ## 6. OBV
-        df['OBV'] = (np.sign(df['Close'].diff()) * df['Volume']).fillna(0).cumsum()
-        if df['OBV'].iloc[-1] > df['OBV'].iloc[-2]:
-            volume_score += 1
+        # === VOLUME ===
+        obv = OnBalanceVolumeIndicator(df["close"], df["volume"]).on_balance_volume()
+        df["OBV"] = obv
+        obv_mean = obv.rolling(window=20).mean()
+        volume_score = 1 if obv.iloc[-1] > obv_mean.iloc[-1] else -1
 
-        # === Volatility Indicators ===
-        ## 7. ATR(15)
-        df['H-L'] = df['High'] - df['Low']
-        df['H-PC'] = abs(df['High'] - df['Close'].shift())
-        df['L-PC'] = abs(df['Low'] - df['Close'].shift())
-        tr = df[['H-L', 'H-PC', 'L-PC']].max(axis=1)
-        df['ATR'] = tr.rolling(window=15).mean()
-        if df['ATR'].iloc[-1] > df['ATR'].mean():
+        df["Chaikin"] = ((2 * df["close"] - df["high"] - df["low"]) / (df["high"] - df["low"] + 1e-9)) * df["volume"]
+        chaikin_mean = df["Chaikin"].rolling(window=15).mean()
+        volume_score += 1 if df["Chaikin"].iloc[-1] > chaikin_mean.iloc[-1] else -1
+
+        # === VOLATILITY ===
+        atr = AverageTrueRange(df["high"], df["low"], df["close"], window=15).average_true_range()
+        df["ATR"] = atr
+        atr_mean = atr.rolling(window=20).mean()
+        volatility_score = 1 if df["ATR"].iloc[-1] > atr_mean.iloc[-1] else -1
+
+        boll = BollingerBands(df["close"], window=30, window_dev=2)
+        upper = boll.bollinger_hband()
+        lower = boll.bollinger_lband()
+        close = df["close"].iloc[-1]
+        if close > upper.iloc[-1]:
             volatility_score += 1
+        elif close < lower.iloc[-1]:
+            volatility_score -= 1
 
-        ## 8. Bollinger Bands(30, 2 std dev)
-        ma30 = df['Close'].rolling(window=30).mean()
-        std30 = df['Close'].rolling(window=30).std()
-        df['UpperBand'] = ma30 + 2 * std30
-        df['LowerBand'] = ma30 - 2 * std30
-        if df['Close'].iloc[-1] < df['UpperBand'].iloc[-1] and df['Close'].iloc[-1] > df['LowerBand'].iloc[-1]:
-            volatility_score += 1
+        # === SUPPORT / RESISTANCE ===
+        high_price = df["high"].max()
+        low_price = df["low"].min()
+        diff = high_price - low_price
+        level_1_1 = low_price + 0.125 * diff
+        level_2_1 = low_price + 0.25 * diff
+        level_3_1 = low_price + 0.375 * diff
+        level_4_1 = low_price + 0.5 * diff
+        level_5_1 = low_price + 0.625 * diff
 
-        # === Support / Resistance ===
-        ## 9. Gann Fan (1:1 approximation)
-        df['Gann_1_1'] = df['Close'].shift(1) + (df['Close'].diff().mean())
-        if df['Close'].iloc[-1] > df['Gann_1_1'].iloc[-1]:
+        support_resistance_score = 0
+        if close > level_5_1:
+            support_resistance_score += 2
+        elif close > level_4_1:
             support_resistance_score += 1
+        elif close < level_2_1:
+            support_resistance_score -= 1
+        elif close < level_1_1:
+            support_resistance_score -= 2
 
-        ## 10. Fibonacci Retracement (swing high/low)
-        swing_high = df['High'].rolling(window=30).max()
-        swing_low = df['Low'].rolling(window=30).min()
-        fib_0_618 = swing_high - 0.618 * (swing_high - swing_low)
-        if df['Close'].iloc[-1] > fib_0_618.iloc[-1]:
-            support_resistance_score += 1
+        gann_line = low_price + 0.5 * diff
+        support_resistance_score += 1 if close > gann_line else -1
+
+        # === FINAL INSERT ===
+        insert_indicator_signal(cursor, symbol,
+                                trend_score, momentum_score,
+                                volume_score, volatility_score,
+                                support_resistance_score)
 
     except Exception as e:
-        print(f"Error processing {symbol}: {e}")
-
-    insert_indicator_signal(cursor, symbol, trend_score, momentum_score, volume_score, volatility_score, support_resistance_score)
+        print(f"Error computing indicators for {symbol}: {e}")
