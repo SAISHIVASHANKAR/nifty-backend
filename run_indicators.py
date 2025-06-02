@@ -1,25 +1,23 @@
 # run_indicators.py
 
-import sqlite3
 from stocks import STOCKS
-from utils import get_cached_df
-from indicators import compute_all_indicators
+from utils import get_cached_df, insert_signal
+from indicators import compute_all_indicators, generate_scores
 
-# Create a single DB connection and cursor to be reused
-conn = sqlite3.connect("nifty_stocks.db")
-cursor = conn.cursor()
+def main():
+    for symbol in STOCKS:
+        try:
+            df = get_cached_df(symbol)
+            if df.empty or len(df) < 30:
+                print(f"⚠️ Skipping {symbol}, insufficient data.")
+                continue
 
-for symbol in STOCKS:
-    df = get_cached_df(symbol)
-    if df is None or df.empty or len(df) < 50:
-        print(f"Skipping {symbol} due to insufficient or missing data.")
-        continue
+            df = compute_all_indicators(df)
+            scores = generate_scores(df)
+            insert_signal(symbol, scores)
 
-    try:
-        compute_all_indicators(df, symbol, cursor)
-        print(f"✅ Indicators for {symbol} inserted.")
-    except Exception as e:
-        print(f"❌ Failed for {symbol}: {e}")
+        except Exception as e:
+            print(f"❌ Error in processing {symbol}: {e}")
 
-conn.commit()
-conn.close()
+if __name__ == "__main__":
+    main()
