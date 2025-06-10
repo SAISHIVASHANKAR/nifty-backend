@@ -10,7 +10,12 @@ def home():
 @app.route("/stat")
 def show_grid():
     signal_data = load_signals()
-    return render_template("grid.html", signals=signal_data)
+    return render_template("grid.html", data=signal_data)
+
+@app.route("/grid")
+def show_indicator_grid():
+    signal_data = load_signals()
+    return render_template("indicator_grid.html", data=signal_data)
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0")
