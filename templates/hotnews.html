@@ -1,0 +1,43 @@
+<!-- templates/hotnews.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>🔥 Hot News</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .tab { margin-top: 20px; }
+    .news-block {
+      background-color: #f9f9f9;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-left: 6px solid #f39c12;
+      border-radius: 5px;
+    }
+    .source { font-size: 0.9em; color: #555; }
+    h2 { margin-bottom: 0; }
+  </style>
+</head>
+<body>
+  <h1>🔥 Hot Market News</h1>
+
+  <div class="tab">
+    <h2>🕕 Start of Day (SOD)</h2>
+    {% for item in sod_news %}
+      <div class="news-block">
+        <strong>{{ item['category'] }}</strong> {{ item['title'] }}<br>
+        <span class="source">{{ item['time'] }} – {{ item['source'] }}</span>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="tab">
+    <h2>🌇 End of Day (EOD)</h2>
+    {% for item in eod_news %}
+      <div class="news-block">
+        <strong>{{ item['category'] }}</strong> {{ item['title'] }}<br>
+        <span class="source">{{ item['time'] }} – {{ item['source'] }}</span>
+      </div>
+    {% endfor %}
+  </div>
+</body>
+</html>
