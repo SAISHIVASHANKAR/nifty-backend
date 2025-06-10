@@ -1,0 +1,22 @@
+<!-- templates/indicator_grid.html -->
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>NIFTY Indicator Grid</title>
+  <link rel="stylesheet" href="/static/indicator_grid.css">
+</head>
+<body>
+  <h2>🧠 Technical Signal Grid</h2>
+  <div class="grid-container">
+    {% for stock in data %}
+    <div class="grid-item" style="background-color: {{ stock.color }}">
+      <b>{{ stock.symbol }}</b><br>
+      📈 {{ stock.trend }} | 💥 {{ stock.momentum }} | 🔊 {{ stock.volume }}<br>
+      ⚡ {{ stock.volatility }} | 🧱 {{ stock.sr }}<br>
+      Score: {{ stock.score }}
+    </div>
+    {% endfor %}
+  </div>
+</body>
+</html>
