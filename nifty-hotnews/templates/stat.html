@@ -1,0 +1,26 @@
+<!-- templates/stat.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Nifty Hot News</title>
+    <link rel="stylesheet" href="/static/stat.css">
+</head>
+<body>
+    <h2>🔥 Nifty Market Hot News</h2>
+    {% if news %}
+        <div class="news-grid">
+            {% for item in news %}
+                <div class="news-card">
+                    <a href="{{ item.link }}" target="_blank">
+                        <h3>{{ item.headline }}</h3>
+                        <p>{{ item.source }} | {{ item.time }}</p>
+                    </a>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>No news data found.</p>
+    {% endif %}
+</body>
+</html>
