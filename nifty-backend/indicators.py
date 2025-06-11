@@ -1,3 +1,4 @@
+# ~/Documents/Amazon/nifty-backend/indicators.py
 from utils import get_db_connection, get_all_symbols, get_cached_df, insert_into_indicator_signals
 import pandas_ta as ta
 
@@ -71,9 +72,7 @@ def compute_all_indicators(df):
         close = df['close']
         max_high = df['high'].rolling(window=10).max()
         min_low = df['low'].rolling(window=10).min()
-        if close.iloc[-1] <= min_low.iloc[-1]:
-            result['support_resistance'] += 1
-        elif close.iloc[-1] >= max_high.iloc[-1]:
+        if close.iloc[-1] <= min_low.iloc[-1] or close.iloc[-1] >= max_high.iloc[-1]:
             result['support_resistance'] += 1
     except:
         pass
