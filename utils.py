@@ -41,3 +41,12 @@ def insert_into_indicator_signals(cursor, symbol, trend, momentum, volume, volat
            VALUES (?, ?, ?, ?, ?, ?)""",
         (symbol, trend, momentum, volume, volatility, support_resistance)
     )
+
+def load_signals():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT symbol, trend, momentum, volume, volatility, support_resistance, score FROM indicator_signals")
+    rows = cursor.fetchall()
+    conn.close()
+    keys = ["symbol", "trend", "momentum", "volume", "volatility", "support_resistance", "score"]
+    return [dict(zip(keys, row)) for row in rows]
