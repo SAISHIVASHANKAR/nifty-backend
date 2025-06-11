@@ -1,91 +1,105 @@
-import pandas as pd
+from utils import get_db_connection, get_all_symbols, get_cached_df, insert_into_indicator_signals
 import pandas_ta as ta
-from utils import insert_into_indicator_signals
 
-def compute_all_indicators(df, symbol, cursor):
+def compute_all_indicators(df):
+    result = {
+        'trend': 0,
+        'momentum': 0,
+        'volume': 0,
+        'volatility': 0,
+        'support_resistance': 0
+    }
+
     try:
-        df = df.copy()
+        df.ta.adx(length=15, append=True)
+        adx_value = df['ADX_15'].iloc[-1]
+        if adx_value > 25:
+            result['trend'] += 1
+    except:
+        pass
 
-        # Ensure datetime index and drop missing price rows
-        df['date'] = pd.to_datetime(df['date'])
-        df.set_index('date', inplace=True)
-        df.index = df.index.tz_localize(None)
-        df = df.dropna(subset=['open', 'high', 'low', 'close', 'volume'])
+    try:
+        df.ta.vwap(append=True)
+        if df['close'].iloc[-1] > df['VWAP_D'].iloc[-1]:
+            result['trend'] += 1
+    except:
+        pass
 
-        score = {
-            "trend": 0,
-            "momentum": 0,
-            "volume": 0,
-            "volatility": 0,
-            "support_resistance": 0
-        }
+    try:
+        macd = ta.macd(df['close'])
+        if macd['MACDh_12_26_9'].iloc[-1] > 0:
+            result['momentum'] += 1
+    except:
+        pass
 
-        # --- Trend ---
-        adx = ta.adx(df['high'], df['low'], df['close'], length=15)
-        vwap = ta.vwap(df['high'], df['low'], df['close'], df['volume'], length=10)
-
-        if not adx.empty and adx['ADX_15'].iloc[-1] > 25:
-            score['trend'] += 1
-        if not vwap.empty and df['close'].iloc[-1] > vwap.iloc[-1]:
-            score['trend'] += 1
-
-        # --- Momentum ---
-        macd = ta.macd(df['close'], fast=18, slow=36, signal=9)
+    try:
         rsi = ta.rsi(df['close'], length=15)
+        if rsi.iloc[-1] > 50:
+            result['momentum'] += 1
+    except:
+        pass
 
-        if not macd.empty and macd['MACD_18_36_9'].iloc[-1] > macd['MACDs_18_36_9'].iloc[-1]:
-            score['momentum'] += 1
-        if not rsi.empty and rsi.iloc[-1] > 50:
-            score['momentum'] += 1
+    try:
+        df['OBV'] = ta.obv(df['close'], df['volume'])
+        if df['OBV'].iloc[-1] > df['OBV'].iloc[-5]:
+            result['volume'] += 1
+    except:
+        pass
 
-        # --- Volume ---
-        obv = ta.obv(df['close'], df['volume'])
-        cho = ta.ad(df['high'], df['low'], df['close'], df['volume'])
+    try:
+        chaikin = ta.adosc(df['high'], df['low'], df['close'], df['volume'], fast=3, slow=10)
+        if chaikin.iloc[-1] > 0:
+            result['volume'] += 1
+    except:
+        pass
 
-        if not obv.empty and obv.iloc[-1] > obv.iloc[-2]:
-            score['volume'] += 1
-        if not cho.empty and cho.iloc[-1] > cho.iloc[-2]:
-            score['volume'] += 1
-
-        # --- Volatility ---
+    try:
         atr = ta.atr(df['high'], df['low'], df['close'], length=15)
+        if atr.iloc[-1] > atr.mean():
+            result['volatility'] += 1
+    except:
+        pass
+
+    try:
         bb = ta.bbands(df['close'], length=30, std=2)
+        if df['close'].iloc[-1] < bb['BBL_30_2.0'].iloc[-1] or df['close'].iloc[-1] > bb['BBU_30_2.0'].iloc[-1]:
+            result['volatility'] += 1
+    except:
+        pass
 
-        if not atr.empty and atr.iloc[-1] > atr.iloc[-2]:
-            score['volatility'] += 1
-        if not bb.empty and df['close'].iloc[-1] > bb['BBM_30_2.0'].iloc[-1]:
-            score['volatility'] += 1
+    try:
+        close = df['close']
+        max_high = df['high'].rolling(window=10).max()
+        min_low = df['low'].rolling(window=10).min()
+        if close.iloc[-1] <= min_low.iloc[-1]:
+            result['support_resistance'] += 1
+        elif close.iloc[-1] >= max_high.iloc[-1]:
+            result['support_resistance'] += 1
+    except:
+        pass
 
-        # --- Support/Resistance (Fibonacci) ---
-        fib_high = df['high'].rolling(window=30).max().iloc[-1]
-        fib_low = df['low'].rolling(window=30).min().iloc[-1]
-        current = df['close'].iloc[-1]
-        levels = [
-            fib_high,
-            fib_low,
-            fib_low + 0.236 * (fib_high - fib_low),
-            fib_low + 0.382 * (fib_high - fib_low),
-            fib_low + 0.618 * (fib_high - fib_low)
-        ]
-        if any(abs(current - lvl) / current < 0.01 for lvl in levels):
-            score['support_resistance'] += 1
+    return result
 
+def process_indicators():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    symbols = get_all_symbols(cursor)
+
+    for symbol in symbols:
+        df = get_cached_df(symbol)
+        if df.empty or len(df) < 30:
+            continue
+
+        signals = compute_all_indicators(df)
         insert_into_indicator_signals(
-            cursor, symbol,
-            score["trend"],
-            score["momentum"],
-            score["volume"],
-            score["volatility"],
-            score["support_resistance"]
-        )
-        return (
-            score["trend"],
-            score["momentum"],
-            score["volume"],
-            score["volatility"],
-            score["support_resistance"]
+            cursor,
+            symbol,
+            signals['trend'],
+            signals['momentum'],
+            signals['volume'],
+            signals['volatility'],
+            signals['support_resistance']
         )
 
-    except Exception as e:
-        print(f"❌ Error in compute_all_indicators() for {symbol}: {e}")
-        return (0, 0, 0, 0, 0)
+    conn.commit()
+    conn.close()
